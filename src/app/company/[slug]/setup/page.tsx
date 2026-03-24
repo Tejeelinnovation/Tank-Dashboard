@@ -539,20 +539,21 @@ export default function CompanySetupPage() {
       <div className="relative">
         <TopHero
           brand="Tankco."
-          // ctaLabel="Logout"
-          // onCtaClickHref="/login"
+          ctaLabel="Dashboard"
+          onCtaClickHref={`/company/${slug}/dashboard`}
           eyebrow="COMPANY SETUP"
           titleLine1="Configure"
           titleLine2="Your Tanks"
           subtitle="Metric 1 is fixed as volume and Metric 2 is fixed as temperature. Admin only chooses channel, unit, and tank capacity."
-          // navItems={[
-          //   { label: "Dashboard", href: `/company/${slug}/dashboard` },
-          // ]}
+          navItems={[
+            { label: "Setup", href: `/company/${slug}/setup` },
+            { label: "Dashboard", href: `/company/${slug}/dashboard` },
+          ]}
         />
 
         <section className="mx-auto max-w-6xl px-6 pb-20 pt-10">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="rounded-3xl border md:h-2/2 border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1">
               <h2 className="text-lg font-semibold">Tank Settings</h2>
               <p className="mt-1 text-sm text-white/55">
                 Set tank count, names, fixed volume/temperature channels, units, capacities, and alarms.
