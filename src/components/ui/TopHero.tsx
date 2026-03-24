@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { ThemeToggle } from "./ThemeToggle";
+// import { ThemeToggle } from "./ThemeToggle";
 import Image from "next/image";
 
 type TopHeroProps = {
@@ -121,7 +121,7 @@ export default function TopHero({
               </Link>
 
               <Link
-                href="https://ekatv.com"
+                href="https://ekatvatechnovation.com"
                 className="hover:text-white transition"
               >
                 About Us
