@@ -169,26 +169,26 @@ export default function AdminDashboardPage() {
       <div className="relative">
         <TopHero
           brand="Tankco."
-          ctaLabel="Logout"
-          onCtaClickHref="/login"
+          // ctaLabel="Logout"
+          // onCtaClickHref="/login"
           eyebrow="ADMIN PANEL"
           titleLine1="Company"
           titleLine2="Management"
           subtitle="Create companies, issue temporary credentials, and control data mode."
-          navItems={[
-            { label: "Dashboard", href: "/admin/dashboard" },
-            { label: "Companies", href: "#companies" },
-          ]}
+          // navItems={[
+          //   { label: "", href: "" },
+          //   { label: "", href: "" },
+          // ]}
         />
 
-        <div className="mx-auto -mt-6 max-w-6xl px-6">
+        {/* <div className="mx-auto -mt-6 max-w-6xl px-6">
           <button
             onClick={logout}
             className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs text-white/80 hover:bg-white/10"
           >
             Logout
           </button>
-        </div>
+        </div> */}
 
         <section id="companies" className="mx-auto max-w-6xl px-6 pb-20 pt-10">
           {err && (
