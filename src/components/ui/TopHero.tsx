@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
+import { ThemeToggle } from "./ThemeToggle";
 
 type TopHeroProps = {
   brand?: string;
@@ -85,10 +86,8 @@ export default function TopHero({
     <header className="relative overflow-hidden">
       
       <div className="relative mx-auto max-w-6xl px-6 pt-6 pb-14">
-
         {/* Navbar */}
         <div className="flex items-center justify-between">
-
           {/* Logo */}
           <Link href="/">
             <div className="text-white/85 font-semibold tracking-tight">
@@ -96,7 +95,7 @@ export default function TopHero({
             </div>
           </Link>
 
-          {/* Desktop Nav */}
+          {/* Desktop Nav Links */}
           {showMenu && (
             <nav className="hidden md:flex items-center gap-8 text-sm text-white/70">
               <Link
@@ -122,28 +121,32 @@ export default function TopHero({
             </nav>
           )}
 
-          {/* Logout */}
-          {showMenu && (
-            <button
-              onClick={logoutCompany}
-              className="rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-black hover:bg-white transition shadow"
-            >
-              Logout
-            </button>
-          )}
+          {/* Right Section: Theme Toggle, Logout & Hamburger */}
+          <div className="flex items-center gap-3">
+            {/* Theme Toggle */}
+            {/* <ThemeToggle /> */}
 
-          {/* Mobile Hamburger */}
-          {showMenu && (
-            <button
-              type="button"
-              className="md:hidden inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5
-                         p-3 text-white/90 hover:bg-white/10 transition"
-              onClick={() => setOpen((v) => !v)}
-            >
-              <HamburgerIcon open={open} />
-            </button>
-          )}
+            {/* Logout Button */}
+            {showMenu && (
+              <button
+                onClick={logoutCompany}
+                className="rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-black hover:bg-white transition shadow"
+              >
+                Logout
+              </button>
+            )}
 
+            {/* Mobile Hamburger */}
+            {showMenu && (
+              <button
+                type="button"
+                className="md:hidden inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 p-3 text-white/90 hover:bg-white/10 transition"
+                onClick={() => setOpen((v) => !v)}
+              >
+                <HamburgerIcon open={open} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Hero Section */}
@@ -208,7 +211,6 @@ export default function TopHero({
 
             {/* Mobile Menu Items */}
             <div className="px-6 pt-10 flex flex-col gap-5 text-lg">
-
               <Link
                 href={`/company/${slug}/dashboard`}
                 onClick={() => setOpen(false)}
@@ -233,13 +235,18 @@ export default function TopHero({
                 About Us
               </Link>
 
+              {/* Theme Toggle in Mobile Menu
+              <div className="border-b border-white/10 pb-3 pt-2">
+                <ThemeToggle />
+              </div> */}
+
+              {/* Logout Button */}
               <button
                 onClick={logoutCompany}
                 className="mt-8 rounded-2xl bg-white text-black py-4 text-center font-semibold"
               >
                 Logout
               </button>
-
             </div>
 
           </div>
