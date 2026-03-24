@@ -287,26 +287,25 @@ export default function CompanyDashboardPage() {
       <div className="relative">
         <TopHero
           brand="Tankco."
-          ctaLabel="Logout"
-          onCtaClickHref="/login"
+          // ctaLabel="Logout"
+          // onCtaClickHref="/login"
           eyebrow="COMPANY DASHBOARD"
           titleLine1="Tank"
           titleLine2="Dashboard"
           subtitle="Live values from InfluxDB using fixed volume and temperature channels configured by the admin."
-          navItems={[
-            { label: "Setup", href: `/company/${slug}/setup` },
-            { label: "Tanks", href: "#tanks" },
-          ]}
+          // navItems={[
+          //   { label: "Setup", href: `/company/${slug}/setup` },
+          // ]}
         />
 
-        <div className="mx-auto -mt-6 max-w-6xl px-6">
+        {/* <div className="mx-auto -mt-6 max-w-6xl px-6">
           <button
             onClick={logoutCompany}
             className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs text-white/80 hover:bg-white/10"
           >
             Logout
           </button>
-        </div>
+        </div> */}
 
         <section id="tanks" className="mx-auto max-w-6xl px-6 pb-20 pt-10">
           <div className="flex items-end justify-between gap-4">

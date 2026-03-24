@@ -52,15 +52,16 @@ export default function LoginPage() {
       <div className="relative">
         <TopHero
           brand="Tankco."
-          ctaLabel="Home"
-          onCtaClickHref="/"
+          // ctaLabel="Home"
+          // onCtaClickHref="/"
           eyebrow="ACCESS"
           titleLine1="Login"
           titleLine2="Welcome to Ekatva"
           subtitle="Use your Login ID and password."
-          navItems={[
-            { label: "About", href: "/" },
-          ]}
+          // navItems={[
+          //   { label: "About", href: "/" },
+          // ]}
+          showMenu={false}
         />
 
         <section className="mx-auto max-w-6xl px-6 pb-24 pt-10">
@@ -84,7 +85,6 @@ export default function LoginPage() {
                   <input
                     value={loginId}
                     onChange={(e) => setLoginId(e.target.value)}
-                    placeholder="e.g. admin or ekatva_admin"
                     autoComplete="username"
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 outline-none placeholder:text-white/25 focus:border-white/20"
                   />
@@ -95,7 +95,6 @@ export default function LoginPage() {
                   <input
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
                     type="password"
                     autoComplete="current-password"
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 outline-none placeholder:text-white/25 focus:border-white/20"
