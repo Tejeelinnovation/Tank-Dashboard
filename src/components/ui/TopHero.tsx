@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, usePathname } from "next/navigation";
 // import { ThemeToggle } from "./ThemeToggle";
 import Image from "next/image";
 
@@ -83,9 +83,13 @@ export default function TopHero({
     }
   };
 
+  const pathname = usePathname();
+
+  const isDashboard = pathname?.includes("/dashboard");
+  const isSetup = pathname?.includes("/setup");
+
   return (
     <header className="relative overflow-hidden">
-      
       <div className="relative mx-auto max-w-6xl px-6 pt-6 pb-14">
         {/* Navbar */}
         <div className="flex items-center justify-between">
@@ -94,7 +98,7 @@ export default function TopHero({
             {/* <div className="text-white/85 font-semibold tracking-tight">
               {brand}
             </div> */}
-            <Image 
+            <Image
               src="/logo.png"
               alt={`${brand} Logo`}
               width={80}
@@ -106,19 +110,23 @@ export default function TopHero({
           {/* Desktop Nav Links */}
           {showMenu && (
             <nav className="hidden md:flex items-center gap-8 text-sm text-white/70">
-              <Link
-                href={`/company/${slug}/dashboard`}
-                className="hover:text-white transition"
-              >
-                Dashboard
-              </Link>
+              {isSetup && (
+                <Link
+                  href={`/company/${slug}/dashboard`}
+                  className="hover:text-white transition"
+                >
+                  Dashboard
+                </Link>
+              )}
 
-              <Link
-                href={`/company/${slug}/setup`}
-                className="hover:text-white transition"
-              >
-                Setup
-              </Link>
+              {isDashboard && (
+                <Link
+                  href={`/company/${slug}/setup`}
+                  className="hover:text-white transition"
+                >
+                  Setup
+                </Link>
+              )}
 
               <Link
                 href="https://ekatvatechnovation.com"
@@ -176,7 +184,6 @@ export default function TopHero({
             {subtitle}
           </p>
         </div>
-
       </div>
 
       {/* Mobile Menu */}
@@ -186,7 +193,6 @@ export default function TopHero({
             open ? "pointer-events-auto" : "pointer-events-none"
           }`}
         >
-
           <div
             className={`absolute inset-0 transition-opacity duration-300 ${
               open ? "opacity-100" : "opacity-0"
@@ -202,12 +208,9 @@ export default function TopHero({
             transition-transform duration-400
             ${open ? "translate-x-0" : "translate-x-full"}`}
           >
-
             {/* Mobile Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
-              <div className="text-white font-semibold text-lg">
-                {brand}
-              </div>
+              <div className="text-white font-semibold text-lg">{brand}</div>
 
               <button
                 onClick={() => setOpen(false)}
@@ -219,21 +222,25 @@ export default function TopHero({
 
             {/* Mobile Menu Items */}
             <div className="px-6 pt-10 flex flex-col gap-5 text-lg">
-              <Link
-                href={`/company/${slug}/dashboard`}
-                onClick={() => setOpen(false)}
-                className="border-b border-white/10 pb-3 text-white/90"
-              >
-                Dashboard
-              </Link>
+              {isSetup && (
+                <Link
+                  href={`/company/${slug}/dashboard`}
+                  onClick={() => setOpen(false)}
+                  className="border-b border-white/10 pb-3 text-white/90"
+                >
+                  Dashboard
+                </Link>
+              )}
 
-              <Link
-                href={`/company/${slug}/setup`}
-                onClick={() => setOpen(false)}
-                className="border-b border-white/10 pb-3 text-white/90"
-              >
-                Setup
-              </Link>
+              {isDashboard && (
+                <Link
+                  href={`/company/${slug}/setup`}
+                  onClick={() => setOpen(false)}
+                  className="border-b border-white/10 pb-3 text-white/90"
+                >
+                  Setup
+                </Link>
+              )}
 
               <Link
                 href="https://ekatv.com"
@@ -256,12 +263,9 @@ export default function TopHero({
                 Logout
               </button>
             </div>
-
           </div>
-
         </div>
       )}
-
     </header>
   );
 }
