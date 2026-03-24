@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { ThemeToggle } from "./ThemeToggle";
+import Image from "next/image";
 
 type TopHeroProps = {
   brand?: string;
@@ -90,9 +91,16 @@ export default function TopHero({
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link href="/">
-            <div className="text-white/85 font-semibold tracking-tight">
+            {/* <div className="text-white/85 font-semibold tracking-tight">
               {brand}
-            </div>
+            </div> */}
+            <Image 
+              src="/logo.png"
+              alt={`${brand} Logo`}
+              width={80}
+              height={40}
+              className="object-contain"
+            />
           </Link>
 
           {/* Desktop Nav Links */}
