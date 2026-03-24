@@ -111,12 +111,12 @@ export default function AdminCompaniesPage() {
             </p>
           </div>
 
-          {/* <button
+          <button
             onClick={logout}
             className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs text-white/80 hover:bg-white/10"
           >
             Logout
-          </button> */}
+          </button>
         </div>
 
         <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">

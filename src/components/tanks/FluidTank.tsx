@@ -202,23 +202,23 @@ export default function FluidTank({
           </linearGradient>
 
           <linearGradient id={tempGradId} x1="0" y1="0" x2="0" y2="1">
-            {/* <stop offset="0%" stopColor="rgba(255,210,90,0.98)" /> */}
+            <stop offset="0%" stopColor="rgba(255,210,90,0.98)" />
             <stop offset="45%" stopColor="rgba(255,130,70,0.92)" />
             <stop offset="100%" stopColor="rgba(255,55,120,0.84)" />
           </linearGradient>
 
-          {/* <linearGradient id={alarmGradId} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={alarmGradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgba(255,170,170,0.99)" />
             <stop offset="45%" stopColor="rgba(255,70,70,0.96)" />
             <stop offset="100%" stopColor="rgba(185,0,0,0.92)" />
-          </linearGradient> */}
+          </linearGradient>
 
-          {/* <linearGradient id={glossGradId} x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id={glossGradId} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="rgba(255,255,255,0.00)" />
             <stop offset="30%" stopColor="rgba(255,255,255,0.18)" />
             <stop offset="55%" stopColor="rgba(255,255,255,0.06)" />
             <stop offset="100%" stopColor="rgba(255,255,255,0.00)" />
-          </linearGradient> */}
+          </linearGradient>
 
           <clipPath id={clipId}>
             <rect x={pad} y={pad} width={innerW} height={innerH} rx={innerRx} />
