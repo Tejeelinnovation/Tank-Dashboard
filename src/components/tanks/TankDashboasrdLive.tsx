@@ -176,6 +176,8 @@ export default function TankDashboardLive() {
 
         const volumeRaw = toNumber(volumeRow?._value);
         const temperatureRaw = toNumber(temperatureRow?._value);
+        
+        const hasData = volumeRaw !== undefined;
 
         const volumeLiters =
           volumeRaw !== undefined
@@ -211,6 +213,7 @@ export default function TankDashboardLive() {
           temperatureChannel: temperatureMetric.channel,
           volumeUnit: volumeMetric.unit,
           temperatureUnit: temperatureMetric.unit,
+          hasData,
           volumeValue:
             volumeRaw !== undefined
               ? Math.round(volumeRaw * 100) / 100

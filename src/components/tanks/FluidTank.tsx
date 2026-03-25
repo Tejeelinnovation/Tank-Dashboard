@@ -203,8 +203,8 @@ export default function FluidTank({
 
           <linearGradient id={tempGradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgba(255,210,90,0.98)" />
-            <stop offset="45%" stopColor="rgba(255,130,70,0.92)" />
-            <stop offset="100%" stopColor="rgba(255,55,120,0.84)" />
+            <stop offset="45%" stopColor="rgba(255, 203, 100, 0.92)" />
+            <stop offset="100%" stopColor="rgba(255, 160, 65, 0.84)" />
           </linearGradient>
 
           <linearGradient id={alarmGradId} x1="0" y1="0" x2="0" y2="1">

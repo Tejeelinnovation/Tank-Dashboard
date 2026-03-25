@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 type TopHeroProps = {
   brand?: string;
@@ -12,6 +13,9 @@ type TopHeroProps = {
   titleLine1?: string;
   titleLine2?: string;
   subtitle?: string;
+  hideCta?: boolean;
+  hideViewTanks?: boolean;
+  titleSize?: "large" | "small";
 };
 
 function HamburgerIcon({ open }: { open: boolean }) {
@@ -40,23 +44,24 @@ function HamburgerIcon({ open }: { open: boolean }) {
 }
 
 export default function TopHero({
-  brand = "Tankco.",
+  brand = "Ekatva",
   navItems = [
     { label: "About", href: "#" },
-    { label: "Tanks", href: "#tanks" },
-    { label: "Process", href: "#" },
-    { label: "FAQ", href: "#" },
+    { label: "Setup", href: "#" },
+    { label: "Dashboard", href: "#" },
   ],
-  ctaLabel = "Admin",
+  ctaLabel = "Logout",
   onCtaClickHref = "/login",
   eyebrow = "INDUSTRIAL MONITORING DASHBOARD",
   titleLine1 = "Tank",
   titleLine2 = "Control",
   subtitle = "Real-time liquid levels with smooth animations and role-based control.",
+  hideCta = false,
+  hideViewTanks = true,
+  titleSize = "large",
 }: TopHeroProps) {
   const [open, setOpen] = React.useState(false);
 
-  // Lock body scroll when menu is open
   React.useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -66,7 +71,6 @@ export default function TopHero({
     };
   }, [open]);
 
-  // ESC closes menu
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -75,46 +79,63 @@ export default function TopHero({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const onNavClick = () => setOpen(false);
+  const handleLogout = async () => {
+    await fetch("/api/company/logout", { method: "POST" }).catch(() => {});
+    await fetch("/api/admin/logout", { method: "POST" }).catch(() => {});
+    window.location.href = "/login";
+  };
 
   return (
     <header className="relative overflow-hidden">
-      {/* Top content */}
       <div className="relative mx-auto max-w-6xl px-6 pt-6 pb-14">
-        {/* Navbar */}
-        <div className="flex items-center justify-between">
-          <div className="text-white/85 font-semibold tracking-tight">
-            {brand}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center">
+          <div className="flex items-center justify-start">
+            <img
+              src="/logo.png"
+              alt="Ekatva Logo"
+              className="h-[40px] md:h-[48px] w-auto object-contain cursor-pointer"
+            />
           </div>
 
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-8 text-sm text-white/70">
-            {navItems.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className="hover:text-white transition"
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
+          <div className="flex items-center justify-center">
+            {navItems.length > 0 && (
+              <nav className="hidden md:flex items-center gap-8 text-sm text-white/70">
+                {navItems.map((item) => (
+                  <a
+                    key={item.label}
+                    href={item.href}
+                    className="whitespace-nowrap hover:text-white transition"
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </nav>
+            )}
+          </div>
 
-          <div className="flex items-center gap-3">
-            {/* Desktop CTA */}
-            <Link
-              href={onCtaClickHref}
-              className="hidden md:inline-flex rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-black
-                         hover:bg-white transition shadow"
-            >
-              {ctaLabel}
-            </Link>
+          
 
-            {/* Mobile hamburger */}
+          <div className="flex items-center justify-end gap-3">
+            {!hideCta &&
+              (ctaLabel === "Logout" ? (
+                <button
+                  onClick={handleLogout}
+                  className="hidden md:inline-flex rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-black hover:bg-white transition shadow cursor-pointer"
+                >
+                  {ctaLabel}
+                </button>
+              ) : (
+                <Link
+                  href={onCtaClickHref}
+                  className="hidden md:inline-flex rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-black hover:bg-white transition shadow"
+                >
+                  {ctaLabel}
+                </Link>
+              ))}
+
             <button
               type="button"
-              className="md:hidden inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5
-                         p-3 text-white/90 hover:bg-white/10 transition"
+              className="md:hidden inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 p-3 text-white/90 hover:bg-white/10 transition"
               aria-label={open ? "Close menu" : "Open menu"}
               aria-expanded={open}
               onClick={() => setOpen((v) => !v)}
@@ -124,17 +145,24 @@ export default function TopHero({
           </div>
         </div>
 
-        {/* Hero center */}
         <div className="mt-16 md:mt-20 text-center">
           <div className="text-[10px] md:text-xs uppercase tracking-[0.28em] text-white/55">
             {eyebrow}
           </div>
 
           <h1 className="mt-5 leading-[0.9]">
-            <span className="block text-6xl md:text-8xl font-semibold text-white">
+            <span
+              className={`block font-semibold text-white ${
+                titleSize === "small" ? "text-5xl md:text-7xl" : "text-6xl md:text-8xl"
+              }`}
+            >
               {titleLine1}
             </span>
-            <span className="block text-6xl md:text-8xl font-semibold text-white/55">
+            <span
+              className={`block font-semibold text-white/55 ${
+                titleSize === "small" ? "text-5xl md:text-7xl" : "text-6xl md:text-8xl"
+              }`}
+            >
               {titleLine2}
             </span>
           </h1>
@@ -143,103 +171,107 @@ export default function TopHero({
             {subtitle}
           </p>
 
-          <a
-            href="#tanks"
-            className="inline-flex items-center justify-center mt-8
-                       rounded-full border border-white/15 bg-white/5 px-5 py-2 text-xs text-white/80
-                       hover:bg-white/10 transition"
-          >
-            View tanks
-          </a>
+          {!hideViewTanks && (
+            <a
+              href="#tanks"
+              className="inline-flex items-center justify-center mt-8 rounded-full border border-white/15 bg-white/5 px-5 py-2 text-xs text-white/80 hover:bg-white/10 transition"
+            >
+              View tanks
+            </a>
+          )}
         </div>
       </div>
 
-      {/* ========= iOS STYLE FULLSCREEN MOBILE MENU ========= */}
-<div
-  className={[
-    "fixed inset-0 z-[80] md:hidden",
-    open ? "pointer-events-auto" : "pointer-events-none",
-  ].join(" ")}
->
-  {/* Blue glass backdrop */}
-  <div
-    className={[
-      "absolute inset-0 transition-opacity duration-300",
-      open ? "opacity-100" : "opacity-0",
-      "bg-blue-500/20 backdrop-blur-xl",
-    ].join(" ")}
-    onClick={() => setOpen(false)}
-  />
-
-  {/* Sliding panel */}
-  <div
-  className={[
-    "absolute inset-y-0 right-0 w-full",
-    // GLASS PANEL
-    "bg-white/10 backdrop-blur-3xl",
-    "border-l border-white/20",
-    "shadow-[-20px_0_60px_rgba(0,0,0,0.35)]",
-    "transition-transform duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]",
-    open ? "translate-x-0" : "translate-x-full",
-  ].join(" ")}
-  role="dialog"
-  aria-modal="true"
->
-
-    {/* Header */}
-    <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
-      <div className="text-white font-semibold text-lg">{brand}</div>
-      <button
-        onClick={() => setOpen(false)}
-        className="rounded-full border border-white/15 bg-white/5 px-4 py-2
-                   text-sm text-white hover:bg-white/10 transition"
+      <div
+        className={[
+          "fixed inset-0 z-[80] md:hidden",
+          open ? "pointer-events-auto" : "pointer-events-none",
+        ].join(" ")}
       >
-        Close
-      </button>
-    </div>
-
-    {/* Menu content */}
-    <div className="px-6 pt-10">
-      <nav className="flex flex-col gap-5 text-lg">
-        {navItems.map((item) => (
-          <a
-            key={item.label}
-            href={item.href}
-            onClick={() => setOpen(false)}
-            className="flex items-center justify-between
-                       border-b border-white/10 pb-3
-                       text-white/90 hover:text-white transition"
-          >
-            {item.label}
-            <span className="text-white/40">›</span>
-          </a>
-        ))}
-      </nav>
-
-      {/* CTA */}
-      <div className="mt-12">
-        <a
-          href={onCtaClickHref}
+        <div
+          className={[
+            "absolute inset-0 transition-opacity duration-300",
+            open ? "opacity-100" : "opacity-0",
+            "bg-blue-500/20 backdrop-blur-xl",
+          ].join(" ")}
           onClick={() => setOpen(false)}
-          className="flex w-full items-center justify-center
-                     rounded-2xl bg-white text-black
-                     py-4 text-base font-semibold
-                     hover:bg-white/90 transition"
+        />
+
+        <div
+          className={[
+            "absolute inset-y-0 right-0 w-full",
+            "bg-white/10 backdrop-blur-3xl",
+            "border-l border-white/20",
+            "shadow-[-20px_0_60px_rgba(0,0,0,0.35)]",
+            "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+            open ? "translate-x-0" : "translate-x-full",
+          ].join(" ")}
+          role="dialog"
+          aria-modal="true"
         >
-          {ctaLabel}
-        </a>
+          <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
+            <div className="flex items-center">
+              <img
+                src="/logo.png"
+                alt="Ekatva Logo"
+                className="h-8 w-auto object-contain"
+              />
+            </div>
+            <button
+              onClick={() => setOpen(false)}
+              className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10 transition"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="px-6 pt-10">
+            {navItems.length > 0 && (
+              <nav className="flex flex-col gap-5 text-lg">
+                {navItems.map((item) => (
+                  <a
+                    key={item.label}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center justify-between border-b border-white/10 pb-3 text-white/90 hover:text-white transition"
+                  >
+                    {item.label}
+                    <span className="text-white/40">›</span>
+                  </a>
+                ))}
+              </nav>
+            )}
+
+            {!hideCta && (
+              <div className="mt-12">
+                {ctaLabel === "Logout" ? (
+                  <button
+                    onClick={() => {
+                      setOpen(false);
+                      handleLogout();
+                    }}
+                    className="flex w-full items-center justify-center rounded-2xl bg-white text-black py-4 text-base font-semibold hover:bg-white/90 transition cursor-pointer"
+                  >
+                    {ctaLabel}
+                  </button>
+                ) : (
+                  <a
+                    href={onCtaClickHref}
+                    onClick={() => setOpen(false)}
+                    className="flex w-full items-center justify-center rounded-2xl bg-white text-black py-4 text-base font-semibold hover:bg-white/90 transition"
+                  >
+                    {ctaLabel}
+                  </a>
+                )}
+              </div>
+            )}
+
+            <p className="mt-8 text-center text-xs text-white/50">
+              Swipe back or tap outside to close
+            </p>
+          </div>
+        </div>
       </div>
-
-      {/* Hint */}
-      <p className="mt-8 text-center text-xs text-white/50">
-        Swipe back or tap outside to close
-      </p>
-    </div>
-  </div>
-</div>
-{/* ========= END iOS MENU ========= */}
-
-    
     </header>
   );
 }

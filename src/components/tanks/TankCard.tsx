@@ -20,6 +20,7 @@ type TankCardProps = {
   temperatureUnit?: TemperatureUnit;
   alarmActive?: boolean;
   alarmLabel?: string;
+  hasData?: boolean;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -40,6 +41,7 @@ export default function TankCard({
   temperatureUnit = "°C",
   alarmActive,
   alarmLabel,
+  hasData = true,
 }: TankCardProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -153,9 +155,28 @@ export default function TankCard({
           </p>
         </div>
 
-        <span className={resolvedAlarmActive ? "text-xs text-red-300" : "text-xs text-white/60"}>
-          {resolvedAlarmActive ? "Alarm" : "Live"}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              !hasData
+                ? "bg-red-500"
+                : resolvedAlarmActive
+                ? "bg-red-500 animate-pulse"
+                : "bg-emerald-500"
+            }`}
+          />
+          <span
+            className={`text-[10px] font-semibold tracking-wide ${
+              !hasData
+                ? "text-red-500"
+                : resolvedAlarmActive
+                ? "text-red-500"
+                : "text-emerald-500"
+            }`}
+          >
+            {!hasData ? "Disconnected" : resolvedAlarmActive ? "Alarm" : "Live"}
+          </span>
+        </div>
       </div>
 
       <div className="flex justify-center">

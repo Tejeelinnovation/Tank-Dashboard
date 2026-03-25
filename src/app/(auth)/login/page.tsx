@@ -51,15 +51,15 @@ export default function LoginPage() {
 
       <div className="relative">
         <TopHero
-          brand="Tankco."
-          ctaLabel="Home"
-          onCtaClickHref="/"
+          brand="Ekatva"
+          hideCta={true}
           eyebrow="ACCESS"
           titleLine1="Login"
           titleLine2="Welcome to Ekatva"
+          titleSize="small"
           subtitle="Use your Login ID and password."
           navItems={[
-            { label: "About", href: "/" },
+            { label: "About", href: "https://ekatvatechnovation.com/" },
           ]}
         />
 

@@ -18,6 +18,7 @@ export type Tank = {
   temperatureUnit?: TemperatureUnit;
   volumeValue?: number;
   temperatureValue?: number;
+  hasData?: boolean;
 };
 
 type TankGridProps = {
@@ -177,6 +178,7 @@ export default function TankGrid({
         temperatureC,
         capacityLiters,
         variant: "rect",
+        hasData: tank.hasData,
       } as Tank;
     });
   }, [tanks]);
@@ -257,7 +259,7 @@ React.useEffect(() => {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2">
         {normalizedTanks.map((tank) => {
           const limits = pickLimits(alarmMap, tank);
           const levelPercent = normalizeLevelPercent(tank);
@@ -280,6 +282,7 @@ React.useEffect(() => {
               temperatureUnit={tank.temperatureUnit}
               alarmActive={alarmActive}
               alarmLabel={alarmActive ? alarmReasons.join(", ") : "Within limits"}
+              hasData={tank.hasData}
               onOpen={onOpenTank ? () => onOpenTank(tank) : undefined}
             />
           );

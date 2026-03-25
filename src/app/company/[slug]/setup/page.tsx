@@ -539,8 +539,6 @@ export default function CompanySetupPage() {
       <div className="relative">
         <TopHero
           brand="Tankco."
-          ctaLabel="Dashboard"
-          onCtaClickHref={`/company/${slug}/dashboard`}
           eyebrow="COMPANY SETUP"
           titleLine1="Configure"
           titleLine2="Your Tanks"
@@ -548,6 +546,7 @@ export default function CompanySetupPage() {
           navItems={[
             { label: "Setup", href: `/company/${slug}/setup` },
             { label: "Dashboard", href: `/company/${slug}/dashboard` },
+            { label: "About", href: "https://ekatvatechnovation.com/" },
           ]}
         />
 

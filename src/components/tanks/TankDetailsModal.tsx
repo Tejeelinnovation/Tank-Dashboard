@@ -161,6 +161,7 @@ export default function TankDetailsModal({
   onClose: () => void;
   tank: Tank | null;
   alarmMap: Record<string, TankAlarmLimits>;
+  hourlyRefreshInterval?: number;
 }) {
   const tankId = tank?.id ?? "";
   const tankName = tank?.name ?? "";
@@ -169,6 +170,10 @@ export default function TankDetailsModal({
   const [history, setHistory] = React.useState<ChartPoint[]>([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [historyError, setHistoryError] = React.useState("");
+
+  const [resolution, setResolution] = React.useState<"daily" | "time">("daily");
+  const [startTimeStr, setStartTimeStr] = React.useState("00:00");
+  const [endTimeStr, setEndTimeStr] = React.useState("23:59");
 
   const today = React.useMemo(() => {
     const d = new Date();
@@ -404,9 +409,18 @@ export default function TankDetailsModal({
       }
 
       const start = parseDateInput(startStr);
-      const end = parseDateInput(endStr);
+      const stop = parseDateInput(endStr);
 
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+      if (resolution === "time") {
+        const [sh, sm] = startTimeStr.split(':').map(Number);
+        start.setHours(sh || 0, sm || 0, 0, 0);
+        const [eh, em] = endTimeStr.split(':').map(Number);
+        stop.setHours(eh || 23, em || 59, 59, 999);
+      } else {
+        stop.setDate(stop.getDate() + 1);
+      }
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(stop.getTime()) || start > stop) {
         if (!cancelled) {
           setHistory([]);
           setHistoryError("");
@@ -414,9 +428,6 @@ export default function TankDetailsModal({
         }
         return;
       }
-
-      const stop = new Date(end);
-      stop.setDate(stop.getDate() + 1);
 
       if (!cancelled) {
         setHistoryLoading(true);
@@ -427,7 +438,7 @@ export default function TankDetailsModal({
         const res = await fetch(
           `/api/influx/history/${encodeURIComponent(channel)}?start=${encodeURIComponent(
             start.toISOString()
-          )}&end=${encodeURIComponent(stop.toISOString())}`,
+          )}&end=${encodeURIComponent(stop.toISOString())}&res=${resolution}`,
           { cache: "no-store" }
         );
 
@@ -520,6 +531,9 @@ export default function TankDetailsModal({
     metric,
     startStr,
     endStr,
+    startTimeStr,
+    endTimeStr,
+    resolution,
     limits?.minVolumeL,
     limits?.maxVolumeL,
     limits?.minTempC,
@@ -644,6 +658,29 @@ export default function TankDetailsModal({
                   >
                     Temperature
                   </button>
+                  <div className="w-px bg-white/10 mx-1" />
+                  <button
+                    onClick={() => setResolution("daily")}
+                    className={[
+                      "rounded-full border px-4 py-2 text-xs transition",
+                      resolution === "daily"
+                        ? "border-white/20 bg-white/15 text-white"
+                        : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10",
+                    ].join(" ")}
+                  >
+                    Daily
+                  </button>
+                  <button
+                    onClick={() => setResolution("time")}
+                    className={[
+                      "rounded-full border px-4 py-2 text-xs transition",
+                      resolution === "time"
+                        ? "border-white/20 bg-white/15 text-white"
+                        : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10",
+                    ].join(" ")}
+                  >
+                    Time-based
+                  </button>
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -653,8 +690,16 @@ export default function TankDetailsModal({
                       type="date"
                       value={startStr}
                       onChange={(e) => setStartStr(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[155px]"
+                      className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[130px]"
                     />
+                    {resolution === "time" && (
+                      <input
+                        type="time"
+                        value={startTimeStr}
+                        onChange={(e) => setStartTimeStr(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[100px]"
+                      />
+                    )}
                   </div>
 
                   <div className="flex w-full items-center gap-2 sm:w-auto">
@@ -663,8 +708,16 @@ export default function TankDetailsModal({
                       type="date"
                       value={endStr}
                       onChange={(e) => setEndStr(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[155px]"
+                      className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[130px]"
                     />
+                    {resolution === "time" && (
+                      <input
+                        type="time"
+                        value={endTimeStr}
+                        onChange={(e) => setEndTimeStr(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[100px]"
+                      />
+                    )}
                   </div>
                 </div>
               </div>

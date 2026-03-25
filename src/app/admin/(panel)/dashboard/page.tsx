@@ -181,15 +181,6 @@ export default function AdminDashboardPage() {
           ]}
         />
 
-        <div className="mx-auto -mt-6 max-w-6xl px-6">
-          <button
-            onClick={logout}
-            className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs text-white/80 hover:bg-white/10"
-          >
-            Logout
-          </button>
-        </div>
-
         <section id="companies" className="mx-auto max-w-6xl px-6 pb-20 pt-10">
           {err && (
             <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
