@@ -131,15 +131,15 @@ export default function TankCard({
       className={[
         "w-full rounded-2xl border p-4 text-left shadow-lg backdrop-blur transition",
         resolvedAlarmActive
-          ? "border-red-500/50 bg-red-500/10 ring-1 ring-red-500/20 shadow-red-950/30 hover:bg-red-500/12"
-          : "border-white/10 bg-white/5 hover:bg-white/8",
+          ? "border-red-500/50 bg-red-50 dark:bg-red-500/10 ring-1 ring-red-500/20 shadow-red-900/10 dark:shadow-red-950/30 hover:bg-red-100 dark:hover:bg-red-500/12"
+          : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/8",
       ].join(" ")}
     >
       <div className="mb-3 flex items-start justify-between">
         <div>
-          <h2 className="font-semibold text-white">{name}</h2>
+          <h2 className="font-semibold text-black dark:text-white">{name}</h2>
 
-          <p className="mt-0.5 text-xs text-white/60" suppressHydrationWarning>
+          <p className="mt-0.5 text-xs text-black/60 dark:text-white/60" suppressHydrationWarning>
             Temp: {tempText}
             {temperatureUnit}
           </p>
@@ -147,8 +147,8 @@ export default function TankCard({
           <p
             className={
               resolvedAlarmActive
-                ? "mt-0.5 text-xs text-red-200"
-                : "mt-0.5 text-xs text-white/45"
+                ? "mt-0.5 text-xs text-red-600 dark:text-red-200"
+                : "mt-0.5 text-xs text-black/45 dark:text-white/45"
             }
           >
             {resolvedAlarmLabel}

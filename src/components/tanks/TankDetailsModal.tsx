@@ -552,12 +552,12 @@ export default function TankDetailsModal({
 
       <div className="absolute inset-0 md:left-1/2 md:top-1/2 md:inset-auto md:w-[95vw] md:max-w-5xl md:-translate-x-1/2 md:-translate-y-1/2">
         <div
-          className="h-full overflow-y-auto rounded-none border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl md:max-h-[85vh] md:rounded-2xl md:p-6"
+          className="h-full overflow-y-auto rounded-none border border-black/10 dark:border-white/10 bg-white dark:bg-white/5 p-4 shadow-2xl backdrop-blur-xl md:max-h-[85vh] md:rounded-2xl md:p-6"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-lg font-semibold text-white md:text-xl">
+              <div className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white md:text-xl">
                 <span className="truncate">{tankName}</span>
                 {alarmNow ? (
                   <span className="shrink-0 rounded-full border border-red-500/30 bg-red-500/15 px-2 py-0.5 text-[10px] text-red-200">
@@ -566,14 +566,14 @@ export default function TankDetailsModal({
                 ) : null}
               </div>
 
-              <div className="text-sm text-white/60">
+              <div className="text-sm text-black/60 dark:text-white/60">
                 Temp:{" "}
                 {typeof tank.temperatureValue === "number"
                   ? `${tank.temperatureValue}${tank.temperatureUnit ?? "°C"}`
                   : typeof tank.temperatureC === "number"
                   ? `${tank.temperatureC.toFixed(1)}°C`
                   : "--"}
-                <span className="mx-2 text-white/25">•</span>
+                <span className="mx-2 text-black/25 dark:text-white/25">•</span>
                 Vol:{" "}
                 {typeof tank.volumeValue === "number"
                   ? `${tank.volumeValue}${tank.volumeUnit ?? "L"}`
@@ -581,7 +581,7 @@ export default function TankDetailsModal({
               </div>
 
               {limits ? (
-                <div className="mt-1 text-xs text-white/45">
+                <div className="mt-1 text-xs text-black/45 dark:text-white/45">
                   Limits:{" "}
                   {typeof limits.minVolumeL === "number" ? `Vol ≥ ${limits.minVolumeL}L` : "—"}
                   {typeof limits.maxVolumeL === "number" ? `, Vol ≤ ${limits.maxVolumeL}L` : ""}
@@ -590,10 +590,10 @@ export default function TankDetailsModal({
                   {typeof limits.maxTempC === "number" ? `, Temp ≤ ${limits.maxTempC}°C` : ""}
                 </div>
               ) : (
-                <div className="mt-1 text-xs text-white/45">No alarm limits set.</div>
+                <div className="mt-1 text-xs text-black/45 dark:text-white/45">No alarm limits set.</div>
               )}
 
-              <div className={alarmNow ? "mt-2 text-xs text-red-200" : "mt-2 text-xs text-emerald-200/85"}>
+              <div className={alarmNow ? "mt-2 text-xs text-red-600 dark:text-red-200" : "mt-2 text-xs text-emerald-600 dark:text-emerald-200/85"}>
                 {alarmNow
                   ? `Alarm active${alarmReasons.length ? ` • ${alarmReasons.join(", ")}` : ""}`
                   : "Within limits"}
@@ -602,14 +602,14 @@ export default function TankDetailsModal({
 
             <button
               onClick={onClose}
-              className="shrink-0 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs text-white/80 transition hover:bg-white/10"
+              className="shrink-0 rounded-full border border-black/15 dark:border-white/15 bg-black/5 dark:bg-white/5 px-4 py-2 text-xs text-black/80 dark:text-white/80 transition hover:bg-black/10 dark:hover:bg-white/10"
             >
               Close
             </button>
           </div>
 
           <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
+            <div className="flex items-center justify-center rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3 sm:p-4">
               <FluidTank
                 level={selectedDisplay.visualLevel}
                 capacityLiters={tank.capacityLiters ?? 1000}
@@ -633,11 +633,11 @@ export default function TankDetailsModal({
                       "rounded-full border px-4 py-2 text-xs transition",
                       volumeAlarmNow
                         ? metric === "volume"
-                          ? "border-red-400/60 bg-red-500/20 text-red-100"
-                          : "border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/15"
+                          ? "border-red-400/60 bg-red-500/20 text-red-900 dark:text-red-100"
+                          : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200 hover:bg-red-500/15"
                         : metric === "volume"
-                        ? "border-white/20 bg-white/15 text-white"
-                        : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10",
+                        ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
+                        : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
                     ].join(" ")}
                   >
                     Volume
@@ -649,23 +649,23 @@ export default function TankDetailsModal({
                       "rounded-full border px-4 py-2 text-xs transition",
                       temperatureAlarmNow
                         ? metric === "temperature"
-                          ? "border-red-400/60 bg-red-500/20 text-red-100"
-                          : "border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/15"
+                          ? "border-red-400/60 bg-red-500/20 text-red-900 dark:text-red-100"
+                          : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200 hover:bg-red-500/15"
                         : metric === "temperature"
-                        ? "border-white/20 bg-white/15 text-white"
-                        : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10",
+                        ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
+                        : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
                     ].join(" ")}
                   >
                     Temperature
                   </button>
-                  <div className="w-px bg-white/10 mx-1" />
+                  <div className="w-px bg-black/10 dark:bg-white/10 mx-1" />
                   <button
                     onClick={() => setResolution("daily")}
                     className={[
                       "rounded-full border px-4 py-2 text-xs transition",
                       resolution === "daily"
-                        ? "border-white/20 bg-white/15 text-white"
-                        : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10",
+                        ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
+                        : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
                     ].join(" ")}
                   >
                     Daily
@@ -675,8 +675,8 @@ export default function TankDetailsModal({
                     className={[
                       "rounded-full border px-4 py-2 text-xs transition",
                       resolution === "time"
-                        ? "border-white/20 bg-white/15 text-white"
-                        : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10",
+                        ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
+                        : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
                     ].join(" ")}
                   >
                     Time-based
@@ -685,37 +685,37 @@ export default function TankDetailsModal({
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                   <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <span className="whitespace-nowrap text-[11px] text-white/50">From</span>
+                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">From</span>
                     <input
                       type="date"
                       value={startStr}
                       onChange={(e) => setStartStr(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[130px]"
+                      className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[130px]"
                     />
                     {resolution === "time" && (
                       <input
                         type="time"
                         value={startTimeStr}
                         onChange={(e) => setStartTimeStr(e.target.value)}
-                        className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[100px]"
+                        className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[100px]"
                       />
                     )}
                   </div>
 
                   <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <span className="whitespace-nowrap text-[11px] text-white/50">To</span>
+                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">To</span>
                     <input
                       type="date"
                       value={endStr}
                       onChange={(e) => setEndStr(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[130px]"
+                      className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[130px]"
                     />
                     {resolution === "time" && (
                       <input
                         type="time"
                         value={endTimeStr}
                         onChange={(e) => setEndTimeStr(e.target.value)}
-                        className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/85 outline-none sm:w-[100px]"
+                        className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[100px]"
                       />
                     )}
                   </div>
@@ -723,15 +723,15 @@ export default function TankDetailsModal({
               </div>
 
               {startStr > endStr ? (
-                <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+                <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-200">
                   Start date must be before end date.
                 </div>
               ) : historyError ? (
-                <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+                <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-200">
                   {historyError}
                 </div>
               ) : historyLoading ? (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-white/60">
+                <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-6 text-sm text-black/60 dark:text-white/60">
                   Loading history...
                 </div>
               ) : (
@@ -744,11 +744,11 @@ export default function TankDetailsModal({
                 />
               )}
 
-              <div className="text-xs text-white/45">
+              <div className="text-xs text-black/45 dark:text-white/45">
                 Showing {history.length} day(s).
                 {limits ? (
                   <>
-                    <span className="mx-1 text-white/25">•</span>
+                    <span className="mx-1 text-black/25 dark:text-white/25">•</span>
                     Alarm points: {alarmEvents.length}
                   </>
                 ) : null}

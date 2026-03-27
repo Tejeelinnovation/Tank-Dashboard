@@ -125,7 +125,7 @@ export default function BackgroundFX() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-      <div className="absolute inset-0 bg-[#050814]" />
+      <div className="absolute inset-0 bg-white dark:bg-[#050814] transition-colors duration-500" />
 
       <motion.div
         className="absolute left-[55%] top-[-340px] -translate-x-1/2 will-change-transform"
@@ -206,12 +206,12 @@ export default function BackgroundFX() {
         </motion.div>
       </motion.div>
 
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.05),rgba(255,255,255,0.018)_12%,rgba(0,0,0,0.10)_30%,rgba(0,0,0,0.48)_58%,rgba(0,0,0,0.88)_100%)]" />
+      <div className="hidden dark:block absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.05),rgba(255,255,255,0.018)_12%,rgba(0,0,0,0.10)_30%,rgba(0,0,0,0.48)_58%,rgba(0,0,0,0.88)_100%)]" />
 
-      <div className="absolute inset-x-0 top-0 h-[38vh] bg-gradient-to-b from-white/[0.03] via-white/[0.012] to-transparent" />
+      <div className="hidden dark:block absolute inset-x-0 top-0 h-[38vh] bg-gradient-to-b from-white/[0.03] via-white/[0.012] to-transparent" />
 
       <div
-        className="absolute inset-0 opacity-[0.07] mix-blend-soft-light"
+        className="absolute inset-0 opacity-[0.03] dark:opacity-[0.07] mix-blend-multiply dark:mix-blend-soft-light"
         style={{
           backgroundImage:
             'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27160%27 height=%27160%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.85%27 numOctaves=%273%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27160%27 height=%27160%27 filter=%27url(%23n)%27 opacity=%270.5%27/%3E%3C/svg%3E")',

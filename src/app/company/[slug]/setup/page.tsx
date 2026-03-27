@@ -533,7 +533,7 @@ export default function CompanySetupPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden text-white">
+    <main className="relative min-h-screen overflow-hidden text-black dark:text-white transition-colors duration-500">
       <BackgroundFX />
 
       <div className="relative">
@@ -552,9 +552,9 @@ export default function CompanySetupPage() {
 
         <section className="mx-auto max-w-6xl px-6 pb-20 pt-10">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1">
-              <h2 className="text-lg font-semibold">Tank Settings</h2>
-              <p className="mt-1 text-sm text-white/55">
+            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1">
+              <h2 className="text-lg font-semibold text-black dark:text-white">Tank Settings</h2>
+              <p className="mt-1 text-sm text-black/60 dark:text-white/55">
                 Set tank count, names, fixed volume/temperature channels, units, capacities, and alarms.
               </p>
 
@@ -566,7 +566,7 @@ export default function CompanySetupPage() {
 
               <div className="mt-6">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm text-white/70">Number of tanks</label>
+                  <label className="text-sm text-black/70 dark:text-white/70">Number of tanks</label>
                   <div className="text-sm font-semibold">{tanksCount}</div>
                 </div>
 
@@ -583,75 +583,75 @@ export default function CompanySetupPage() {
                   className="mt-3 w-full"
                 />
 
-                <div className="mt-3 text-xs text-white/50">
-                  Total capacity: <span className="text-white/80">{totalCapacity.toLocaleString()}</span> L
+                <div className="mt-3 text-xs text-black/50 dark:text-white/50">
+                  Total capacity: <span className="text-black/80 dark:text-white/80">{totalCapacity.toLocaleString()}</span> L
                 </div>
               </div>
 
-              <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="mt-6 rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/20 p-4">
                 <div className="text-sm font-medium">Apply capacity to all tanks</div>
                 <div className="mt-2 flex items-center gap-2">
                   <input
                     type="number"
                     value={applyAllCap}
                     onChange={(e) => setApplyAllCap(Number(e.target.value))}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 outline-none"
+                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-black dark:text-white outline-none"
                     placeholder="Capacity for all tanks (L)"
                   />
                   <button
                     onClick={applyToAllCap}
-                    className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black"
+                    className="rounded-xl bg-black dark:bg-white px-4 py-2 text-sm font-semibold text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 transition"
                   >
                     Apply
                   </button>
                 </div>
               </div>
 
-              <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="mt-6 rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/20 p-4">
                 <div className="text-sm font-medium">Apply alarm limits to all tanks</div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <input
                     value={applyAllMinVol}
                     onChange={(e) => setApplyAllMinVol(e.target.value)}
                     placeholder="Min Volume (L)"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                   />
                   <input
                     value={applyAllMaxVol}
                     onChange={(e) => setApplyAllMaxVol(e.target.value)}
                     placeholder="Max Volume (L)"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                   />
                   <input
                     value={applyAllMinTemp}
                     onChange={(e) => setApplyAllMinTemp(e.target.value)}
                     placeholder="Min Temp (°C)"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                   />
                   <input
                     value={applyAllMaxTemp}
                     onChange={(e) => setApplyAllMaxTemp(e.target.value)}
                     placeholder="Max Temp (°C)"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                   />
                 </div>
 
                 <button
                   onClick={applyLimitsToAll}
-                  className="mt-3 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-xs text-white/90 hover:bg-white/15"
+                  className="mt-3 w-full rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/10 px-4 py-2 text-xs text-black/90 dark:text-white/90 hover:bg-black/10 dark:hover:bg-white/15 transition"
                 >
                   Apply limits to all tanks
                 </button>
 
-                <div className="mt-2 text-[11px] text-white/50">
+                <div className="mt-2 text-[11px] text-black/50 dark:text-white/50">
                   Leave a field blank to not set that limit.
                 </div>
               </div>
 
               <div className="mt-6">
                 <div className="text-sm font-medium">CSV Upload (optional)</div>
-                <p className="mt-1 text-xs text-white/55">
-                  CSV headers: <span className="text-white/80">TankName, Level, Temp</span>
+                <p className="mt-1 text-xs text-black/55 dark:text-white/55">
+                  CSV headers: <span className="text-black/80 dark:text-white/80">TankName, Level, Temp</span>
                 </p>
 
                 <input
@@ -662,9 +662,9 @@ export default function CompanySetupPage() {
                     const f = e.target.files?.[0];
                     if (f) uploadCSV(f);
                   }}
-                  className="mt-3 block w-full text-xs text-white/70 file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2 file:text-xs file:font-semibold file:text-black hover:file:opacity-90"
+                  className="mt-3 block w-full text-xs text-black/70 dark:text-white/70 file:mr-4 file:rounded-xl file:border file:border-black/10 dark:file:border-0 file:bg-white file:px-4 file:py-2 file:text-xs file:font-semibold file:text-black hover:file:opacity-90 transition"
                 />
-                {uploading && <div className="mt-2 text-xs text-white/60">Uploading…</div>}
+                {uploading && <div className="mt-2 text-xs text-black/60 dark:text-white/60">Uploading…</div>}
               </div>
 
               {msg && (
@@ -683,28 +683,28 @@ export default function CompanySetupPage() {
               <button
                 onClick={saveAndGo}
                 disabled={saving || initialLoading}
-                className="mt-6 w-full rounded-2xl bg-white py-3 font-semibold text-black disabled:opacity-60"
+                className="mt-6 w-full rounded-2xl bg-black dark:bg-white py-3 font-semibold text-white dark:text-black disabled:opacity-60 transition"
               >
                 {saving ? "Saving…" : "Save & Go to Dashboard"}
               </button>
 
               <a
                 href={`/company/${slug}/dashboard`}
-                className="mt-3 block text-center text-xs text-white/60 hover:text-white/80"
+                className="mt-3 block text-center text-xs text-black/60 dark:text-white/60 hover:text-black/80 dark:hover:text-white/80 transition"
               >
                 Skip → Open Dashboard
               </a>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2">
+            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2">
               <div className="flex items-end justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold">Per Tank Settings</h2>
-                  <p className="mt-1 text-sm text-white/55">
+                  <h2 className="text-lg font-semibold text-black dark:text-white">Per Tank Settings</h2>
+                  <p className="mt-1 text-sm text-black/55 dark:text-white/55">
                     Capacity is used to convert L, %, or m³ into actual fill percentage and liters.
                   </p>
                 </div>
-                <div className="text-xs text-white/50">{tanksCount} tanks</div>
+                <div className="text-xs text-black/50 dark:text-white/50">{tanksCount} tanks</div>
               </div>
 
               <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -716,27 +716,27 @@ export default function CompanySetupPage() {
                   return (
                     <div
                       key={key}
-                      className="rounded-2xl border border-white/10 bg-black/20 p-4"
+                      className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/20 p-4"
                     >
                       <div className="flex items-center justify-between">
                         <div className="text-sm font-semibold">{key}</div>
-                        <div className="text-xs text-white/50">
+                        <div className="text-xs text-black/50 dark:text-white/50">
                           {isEmptyLimits(lim) ? "No limits" : "Limits set"}
                         </div>
                       </div>
 
                       <div className="mt-3">
-                        <div className="text-xs text-white/55">Tank name</div>
+                        <div className="text-xs text-black/55 dark:text-white/55">Tank name</div>
                         <input
                           type="text"
                           value={tank.name}
                           onChange={(e) => updateTankField(i, "name", e.target.value)}
-                          className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                          className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                         />
                       </div>
 
                       <div className="mt-3">
-                        <div className="text-xs text-white/55">Capacity (L)</div>
+                        <div className="text-xs text-black/55 dark:text-white/55">Capacity (L)</div>
                         <input
                           type="number"
                           value={tank.capacityLiters}
@@ -747,19 +747,19 @@ export default function CompanySetupPage() {
                               clamp(Number(e.target.value) || 0, 1, 1_000_000)
                             )
                           }
-                          className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                          className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                         />
                       </div>
 
-                      <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs font-medium text-white/80">Metric 1 — Volume</div>
+                      <div className="mt-4 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3">
+                        <div className="text-xs font-medium text-black/80 dark:text-white/80">Metric 1 — Volume</div>
 
                         <div className="mt-2">
-                          <div className="text-xs text-white/55">Channel</div>
+                          <div className="text-xs text-black/55 dark:text-white/55">Channel</div>
                           <select
                             value={tank.metrics[0].channel}
                             onChange={(e) => updateVolumeMetricField(i, "channel", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                            className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                           >
                             {Array.from({ length: 24 }, (_, idx) => `CH${idx + 1}`).map((ch) => (
                               <option key={ch} value={ch}>
@@ -770,11 +770,11 @@ export default function CompanySetupPage() {
                         </div>
 
                         <div className="mt-3">
-                          <div className="text-xs text-white/55">Unit</div>
+                          <div className="text-xs text-black/55 dark:text-white/55">Unit</div>
                           <select
                             value={tank.metrics[0].unit}
                             onChange={(e) => updateVolumeMetricField(i, "unit", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                            className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                           >
                             {VOLUME_UNITS.map((unit) => (
                               <option key={unit} value={unit}>
@@ -785,17 +785,17 @@ export default function CompanySetupPage() {
                         </div>
                       </div>
 
-                      <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs font-medium text-white/80">
+                      <div className="mt-4 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3">
+                        <div className="text-xs font-medium text-black/80 dark:text-white/80">
                           Metric 2 — Temperature
                         </div>
 
                         <div className="mt-2">
-                          <div className="text-xs text-white/55">Channel</div>
+                          <div className="text-xs text-black/55 dark:text-white/55">Channel</div>
                           <select
                             value={tank.metrics[1].channel}
                             onChange={(e) => updateTemperatureMetricField(i, "channel", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                            className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                           >
                             {Array.from({ length: 24 }, (_, idx) => `CH${idx + 1}`).map((ch) => (
                               <option key={ch} value={ch}>
@@ -806,11 +806,11 @@ export default function CompanySetupPage() {
                         </div>
 
                         <div className="mt-3">
-                          <div className="text-xs text-white/55">Unit</div>
+                          <div className="text-xs text-black/55 dark:text-white/55">Unit</div>
                           <select
                             value={tank.metrics[1].unit}
                             onChange={(e) => updateTemperatureMetricField(i, "unit", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                            className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                           >
                             {TEMPERATURE_UNITS.map((unit) => (
                               <option key={unit} value={unit}>
@@ -822,7 +822,7 @@ export default function CompanySetupPage() {
                       </div>
 
                       <div className="mt-3">
-                        <div className="text-xs text-white/55">Volume limits</div>
+                        <div className="text-xs text-black/55 dark:text-white/55">Volume limits</div>
                         <div className="mt-1 grid grid-cols-2 gap-2">
                           <input
                             value={typeof lim.minVolumeL === "number" ? String(lim.minVolumeL) : ""}
@@ -830,7 +830,7 @@ export default function CompanySetupPage() {
                               updateTankLimit(i, { minVolumeL: numOrUndef(e.target.value) })
                             }
                             placeholder="Min"
-                            className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                            className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                           />
                           <input
                             value={typeof lim.maxVolumeL === "number" ? String(lim.maxVolumeL) : ""}
@@ -838,13 +838,13 @@ export default function CompanySetupPage() {
                               updateTankLimit(i, { maxVolumeL: numOrUndef(e.target.value) })
                             }
                             placeholder="Max"
-                            className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                            className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                           />
                         </div>
                       </div>
 
                       <div className="mt-3">
-                        <div className="text-xs text-white/55">Temp limits (°C)</div>
+                        <div className="text-xs text-black/55 dark:text-white/55">Temp limits (°C)</div>
                         <div className="mt-1 grid grid-cols-2 gap-2">
                           <input
                             value={typeof lim.minTempC === "number" ? String(lim.minTempC) : ""}
@@ -852,7 +852,7 @@ export default function CompanySetupPage() {
                               updateTankLimit(i, { minTempC: numOrUndef(e.target.value) })
                             }
                             placeholder="Min"
-                            className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                            className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                           />
                           <input
                             value={typeof lim.maxTempC === "number" ? String(lim.maxTempC) : ""}
@@ -860,12 +860,12 @@ export default function CompanySetupPage() {
                               updateTankLimit(i, { maxTempC: numOrUndef(e.target.value) })
                             }
                             placeholder="Max"
-                            className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none"
+                            className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
                           />
                         </div>
                       </div>
 
-                      <div className="mt-3 text-[11px] text-white/45">
+                      <div className="mt-3 text-[11px] text-black/45 dark:text-white/45">
                         Metric 1 is fixed as volume and Metric 2 is fixed as temperature.
                       </div>
                     </div>
@@ -873,8 +873,8 @@ export default function CompanySetupPage() {
                 })}
               </div>
 
-              <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4 text-xs text-white/55">
-                <div className="font-semibold text-white/80">How it works</div>
+              <div className="mt-6 rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/20 p-4 text-xs text-black/55 dark:text-white/55">
+                <div className="font-semibold text-black/80 dark:text-white/80">How it works</div>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   <li>Metric 1 is always volume and Metric 2 is always temperature.</li>
                   <li>Admin only selects the channel and the unit for each metric.</li>

@@ -290,7 +290,7 @@ export default function CompanyDashboardPage() {
   }, [slug]);
 
   return (
-    <main className="relative min-h-screen overflow-hidden text-white">
+    <main className="relative min-h-screen overflow-hidden text-black dark:text-white transition-colors duration-500">
       <BackgroundFX />
 
       <div className="relative">
@@ -319,17 +319,17 @@ export default function CompanyDashboardPage() {
 
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
             {/* Left side: Tanks */}
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2">
+            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2">
               <div className="mb-6 flex items-end justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-white md:text-2xl">
+                  <h2 className="text-xl font-semibold text-black dark:text-white md:text-2xl">
                     Live Tanks
                   </h2>
-                  <p className="mt-1 text-sm text-white/55">
+                  <p className="mt-1 text-sm text-black/60 dark:text-white/55">
                     Showing current configured volume and temperature channels from InfluxDB.
                   </p>
                 </div>
-                <div className="text-xs text-white/50">
+                <div className="text-xs text-black/50 dark:text-white/50">
                   {loading ? "Loading…" : "Updated every 15s"}
                 </div>
               </div>
@@ -344,27 +344,27 @@ export default function CompanyDashboardPage() {
             </div>
 
             {/* Right side: Alarms */}
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1 sticky top-6">
+            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1 sticky top-6">
               <div className="mb-6 flex items-end justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-white md:text-xl">
+                  <h2 className="text-lg font-semibold text-black dark:text-white md:text-xl">
                     Active Alarms
                   </h2>
-                  <p className="mt-1 text-sm text-white/55">
+                  <p className="mt-1 text-sm text-black/60 dark:text-white/55">
                     Latest notifications.
                   </p>
                 </div>
               </div>
 
               {alarms.length > 0 ? (
-                <div className="rounded-2xl border border-red-500/25 bg-red-500/10 p-4 backdrop-blur-xl">
-                  <div className="space-y-3 text-xs text-white/70">
+                <div className="rounded-2xl border border-red-500/25 bg-red-50 dark:bg-red-500/10 p-4 backdrop-blur-xl">
+                  <div className="space-y-3 text-xs text-black/70 dark:text-white/70">
                     {alarms.map((a, i) => (
                       <div
                         key={i}
-                        className="flex flex-col gap-1 border-b border-white/10 pb-3 last:border-b-0 last:pb-0"
+                        className="flex flex-col gap-1 border-b border-black/10 dark:border-white/10 pb-3 last:border-b-0 last:pb-0"
                       >
-                        <div className="text-white/90">
+                        <div className="text-black/90 dark:text-white/90">
                           <span className="font-semibold">{a.tankName}</span>{" "}
                           <span className="text-red-200">— {a.reason}</span>
                         </div>
@@ -380,7 +380,7 @@ export default function CompanyDashboardPage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/55">
+                <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 text-center text-sm text-black/55 dark:text-white/55">
                   No active alarms.
                 </div>
               )}
