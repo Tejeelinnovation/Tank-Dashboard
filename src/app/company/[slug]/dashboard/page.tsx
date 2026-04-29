@@ -8,12 +8,12 @@ import type { TankAlarmLimits } from "@/types/alarm";
 import TopHero from "@/components/ui/TopHero";
 import BackgroundFX from "@/components/ui/BackgroundFX";
 import TankDetailsModal from "@/components/tanks/TankDetailsModal";
-import { 
-  type VolumeUnit, 
-  type TemperatureUnit, 
-  convertMaToLiters, 
-  convertFromLiters, 
-  convertTemperature 
+import {
+  type VolumeUnit,
+  type TemperatureUnit,
+  convertMaToLiters,
+  convertFromLiters,
+  convertTemperature,
 } from "@/lib/conversions";
 
 type TankSetupItem = {
@@ -43,16 +43,8 @@ function makeDefaultTank(i: number): TankSetupItem {
     capacityLiters: 1000,
     variant: "rect",
     metrics: [
-      {
-        channel: `CH${i * 2 + 1}`,
-        type: "volume",
-        unit: "L",
-      },
-      {
-        channel: `CH${i * 2 + 2}`,
-        type: "temperature",
-        unit: "°C",
-      },
+      { channel: `CH${i * 2 + 1}`, type: "volume", unit: "L" as VolumeUnit },
+      { channel: `CH${i * 2 + 2}`, type: "temperature", unit: "°C" as TemperatureUnit },
     ],
   };
 }
@@ -63,7 +55,13 @@ export default function CompanyDashboardPage() {
 
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [setupTanks, setSetupTanks] = useState<TankSetupItem[]>([]);
-  const [companyBranding, setCompanyBranding] = useState<{ name: string; logoUrl: string; influxOrg?: string; influxBucket?: string }>({ name: "", logoUrl: "" });
+  const [companyBranding, setCompanyBranding] = useState<{
+    name: string;
+    logoUrl: string;
+    influxOrg?: string;
+    influxBucket?: string;
+  }>({ name: "", logoUrl: "" });
+
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [alarms, setAlarms] = useState<AlarmEvent[]>([]);
@@ -77,13 +75,18 @@ export default function CompanyDashboardPage() {
 
   const loadSettings = useCallback(async () => {
     if (!slug) return;
+
     try {
-      const settingsRes = await fetch(`/api/company/settings?slug=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      const settingsRes = await fetch(
+        `/api/company/settings?slug=${encodeURIComponent(slug)}`,
+        { cache: "no-store" }
+      );
+
       const settingsJson = await settingsRes.json().catch(() => ({}));
       if (!settingsRes.ok || !settingsJson?.ok) return;
 
       const company = settingsJson?.company || {};
-      const tanksCount = clamp(Number(company.tanksCount ?? 4), 1, 20);
+      const tanksCount = clamp(Number(company.tanksCount ?? 1), 1, 20);
       const tankCapacities = company.tankCapacities ?? [];
       const settingsRows = settingsJson?.tanks ?? [];
 
@@ -94,36 +97,52 @@ export default function CompanyDashboardPage() {
         influxBucket: company.influxBucket,
       });
 
-      const normalizedSetup: TankSetupItem[] = Array.from({ length: tanksCount }, (_, i) => {
-        const row = settingsRows[i];
-        if (!row) return { ...makeDefaultTank(i), capacityLiters: Number(tankCapacities[i]) || 1000 };
-        return {
-          id: String(row.id || row.tankKey || `tank-${i + 1}`),
-          name: String(row.tankName || row.name || `Tank ${i + 1}`).trim(),
-          capacityLiters: Number(row.capacityLiters) || Number(tankCapacities[i]) || 1000,
-          metrics: [
-            { 
-               channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(), 
-               type: "volume", 
-               unit: (String(row.volumeUnit || "L").trim()) as VolumeUnit 
-            },
-            { 
-               channel: String(row.temperatureChannel ?? `CH${i * 2 + 2}`).trim(), 
-               type: "temperature", 
-               unit: (String(row.temperatureUnit || "°C").trim()) as TemperatureUnit 
-            },
-          ]
-        };
-      });
+      const normalizedSetup: TankSetupItem[] = Array.from(
+        { length: tanksCount },
+        (_, i) => {
+          const row = settingsRows[i];
+
+          if (!row) {
+            return {
+              ...makeDefaultTank(i),
+              capacityLiters: Number(tankCapacities[i]) || 1000,
+            };
+          }
+
+          return {
+            id: String(row.id || row.tankKey || `tank-${i + 1}`),
+            name: String(row.tankName || row.name || `Tank ${i + 1}`).trim(),
+            capacityLiters:
+              Number(row.capacityLiters) || Number(tankCapacities[i]) || 1000,
+            variant: "rect",
+            metrics: [
+              {
+                channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(),
+                type: "volume",
+                unit: String(row.volumeUnit || "L").trim() as VolumeUnit,
+              },
+              {
+                channel: String(row.temperatureChannel ?? `CH${i * 2 + 2}`).trim(),
+                type: "temperature",
+                unit: String(row.temperatureUnit || "°C").trim() as TemperatureUnit,
+              },
+            ],
+          };
+        }
+      );
+
       setSetupTanks(normalizedSetup);
       setAlarmMap(settingsJson?.alarms || {});
-    } catch (e) { console.error("Failed to load settings", e); }
+    } catch (e) {
+      console.error("Failed to load settings", e);
+    }
   }, [slug]);
 
   const loadData = useCallback(async () => {
     if (!slug || setupTanks.length === 0) return;
-    
+
     const { influxOrg, influxBucket } = companyBranding;
+
     if (!influxOrg || !influxBucket) {
       setErr("Data source not configured. Please contact administrator.");
       setLoading(false);
@@ -137,29 +156,53 @@ export default function CompanyDashboardPage() {
 
       const influxRes = await fetch(url.toString(), { cache: "no-store" });
       const influxJson = await influxRes.json().catch(() => ({}));
-      if (!influxRes.ok) throw new Error("Influx failed");
+
+      if (!influxRes.ok) {
+        throw new Error("Influx failed");
+      }
 
       const rows = Array.isArray(influxJson?.rows) ? influxJson.rows : [];
+
       const mapped: Tank[] = setupTanks.map((cfg) => {
         const volumeMetric = cfg.metrics[0];
         const temperatureMetric = cfg.metrics[1];
-        const volumeRow = rows.find((r: any) => r.channel === volumeMetric.channel);
-        const temperatureRow = rows.find((r: any) => r.channel === temperatureMetric.channel);
-        
+
+        const volumeRow = rows.find(
+          (r: any) => r.channel === volumeMetric.channel
+        );
+
+        const temperatureRow = rows.find(
+          (r: any) => r.channel === temperatureMetric.channel
+        );
+
         const mA = toNumber(volumeRow?._value);
-        const volumeLiters = mA !== undefined ? convertMaToLiters(mA, cfg.capacityLiters) : 0;
-        
+        const volumeLiters =
+          mA !== undefined ? convertMaToLiters(mA, cfg.capacityLiters) : 0;
+
         const temperatureRaw = toNumber(temperatureRow?._value);
-        const temperatureC = temperatureRaw !== undefined ? convertTemperature(temperatureRaw, temperatureMetric.unit, "°C") : undefined;
+        const temperatureC =
+          temperatureRaw !== undefined
+            ? convertTemperature(temperatureRaw, temperatureMetric.unit, "°C")
+            : undefined;
 
         let hasData = false;
+
         if (volumeRow?._time) {
-          const pt = new Date(volumeRow._time).getTime();
-          if (!Number.isNaN(pt) && Date.now() - pt <= 60 * 60 * 1000) hasData = true;
+          const pointTime = new Date(volumeRow._time).getTime();
+
+          if (!Number.isNaN(pointTime) && Date.now() - pointTime <= 60 * 60 * 1000) {
+            hasData = true;
+          }
         }
 
-        const level = (volumeLiters / cfg.capacityLiters) * 100;
-        const volumeValue = convertFromLiters(volumeLiters, volumeMetric.unit, cfg.capacityLiters);
+        const level =
+          cfg.capacityLiters > 0 ? (volumeLiters / cfg.capacityLiters) * 100 : 0;
+
+        const volumeValue = convertFromLiters(
+          volumeLiters,
+          volumeMetric.unit,
+          cfg.capacityLiters
+        );
 
         return {
           id: cfg.id,
@@ -174,45 +217,43 @@ export default function CompanyDashboardPage() {
           temperatureUnit: temperatureMetric.unit,
           hasData,
           volumeValue: Math.round(volumeValue * 100) / 100,
-          temperatureValue: temperatureRaw !== undefined ? Math.round(temperatureRaw * 10) / 10 : undefined,
+          temperatureValue:
+            temperatureRaw !== undefined
+              ? Math.round(temperatureRaw * 10) / 10
+              : undefined,
         };
       });
 
       setTanks(mapped);
       setLoading(false);
     } catch (e) {
+      console.error("Failed to update live data", e);
       setErr("Failed to update live data");
       setLoading(false);
     }
-  }, [slug, setupTanks]);
-
+  }, [slug, setupTanks, companyBranding]);
 
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
   useEffect(() => {
-    if (setupTanks.length > 0) loadData();
+    if (setupTanks.length > 0) {
+      loadData();
+    }
   }, [setupTanks, loadData]);
 
   useVisibilityPolling(loadData, 10000);
 
   useEffect(() => {
-    if (err) {
-      const timer = setTimeout(() => setErr(""), 3000);
-      return () => clearTimeout(timer);
-    }
+    if (!err) return;
+
+    const timer = setTimeout(() => setErr(""), 3000);
+    return () => clearTimeout(timer);
   }, [err]);
 
-  async function logoutCompany() {
-    await fetch("/api/company/logout", { method: "POST" }).catch(() => {});
-    window.location.href = "/login";
-  }
-
-  // Polling logic moved to useVisibilityPolling above.
-
   return (
-    <main className="relative min-h-screen overflow-hidden text-black dark:text-white transition-colors duration-500">
+    <main className="relative min-h-screen overflow-hidden text-black transition-colors duration-300 dark:text-white">
       <BackgroundFX />
 
       <div className="relative">
@@ -220,7 +261,7 @@ export default function CompanyDashboardPage() {
           brand="Ekatva"
           logoUrl={companyBranding.logoUrl}
           companyName={companyBranding.name}
-          hideViewTanks={true}
+          hideViewTanks
           eyebrow="COMPANY DASHBOARD"
           titleLine1=""
           titleLine2=""
@@ -232,32 +273,27 @@ export default function CompanyDashboardPage() {
           ]}
         />
 
-        {/* Logout and Request Password buttons removed - moved to Setup or top nav */}
-
-
-
-
         <section id="tanks" className="mx-auto max-w-6xl px-6 pb-20 pt-10">
           {err ? (
-            <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            <div className="mb-6 rounded-xl border border-red-500/30 bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">
               {err}
             </div>
           ) : null}
 
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-            {/* Left side: Tanks */}
-            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2">
+            <div className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 lg:col-span-2">
               <div className="mb-6 flex items-end justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="text-xl font-semibold text-black dark:text-white md:text-2xl truncate">
+                  <h2 className="truncate text-xl font-semibold text-black dark:text-white md:text-2xl">
                     Live Tanks
                   </h2>
                   <p className="mt-1 text-sm text-black/60 dark:text-white/55">
                     Showing current configured volume and temperature channels from InfluxDB.
                   </p>
                 </div>
+
                 <div className="text-xs text-black/50 dark:text-white/50">
-                  {loading ? "Loading…" : "Updated every 15s"}
+                  {loading ? "Loading…" : "Updated every 10s"}
                 </div>
               </div>
 
@@ -270,8 +306,7 @@ export default function CompanyDashboardPage() {
               />
             </div>
 
-            {/* Right side: Alarms */}
-            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1 sticky top-6">
+            <div className="sticky top-6 rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 lg:col-span-1">
               <div className="mb-6 flex items-end justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-semibold text-black dark:text-white md:text-xl">
@@ -284,20 +319,24 @@ export default function CompanyDashboardPage() {
               </div>
 
               {alarms.length > 0 ? (
-                <div className="rounded-2xl border border-red-500/25 bg-red-50 dark:bg-red-500/10 p-4 backdrop-blur-xl">
+                <div className="rounded-2xl border border-red-500/25 bg-red-50 p-4 backdrop-blur-xl dark:bg-red-500/10">
                   <div className="space-y-3 text-xs text-black/70 dark:text-white/70">
                     {alarms.map((a, i) => (
                       <div
-                        key={i}
-                        className="flex flex-col gap-1 border-b border-black/10 dark:border-white/10 pb-3 last:border-b-0 last:pb-0"
+                        key={`${a.tankId}-${i}`}
+                        className="flex flex-col gap-1 border-b border-black/10 pb-3 last:border-b-0 last:pb-0 dark:border-white/10"
                       >
                         <div className="text-black/90 dark:text-white/90">
                           <span className="font-semibold">{a.tankName}</span>{" "}
-                          <span className="text-red-200">— {a.reason}</span>
+                          <span className="text-red-600 dark:text-red-300">
+                            — {a.reason}
+                          </span>
                         </div>
-                        <div className="text-white/55">
+
+                        <div className="text-black/55 dark:text-white/55">
                           Value:{" "}
-                          {typeof a.volumeL === "number" ? `${a.volumeL}` : "--"} • Temp:{" "}
+                          {typeof a.volumeL === "number" ? `${a.volumeL}` : "--"} •
+                          Temp:{" "}
                           {typeof a.temperatureC === "number"
                             ? `${a.temperatureC}°C`
                             : "--"}
@@ -307,7 +346,7 @@ export default function CompanyDashboardPage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 text-center text-sm text-black/55 dark:text-white/55">
+                <div className="rounded-2xl border border-black/10 bg-white/50 p-6 text-center text-sm text-black/55 dark:border-white/10 dark:bg-white/5 dark:text-white/55">
                   No active alarms.
                 </div>
               )}

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import FluidTank from "./FluidTankClient";
 import type { TankAlarmLimits } from "@/types/alarm";
-import type { VolumeUnit, TemperatureUnit } from "@/lib/companySetupClient";
+import { type VolumeUnit, type TemperatureUnit, convertFromLiters, convertTemperature } from "@/lib/conversions";
 
 type TankCardProps = {
   id?: string;

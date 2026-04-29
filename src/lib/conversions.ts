@@ -2,8 +2,20 @@
  * Tank Data Conversion Utilities
  */
 
-export type VolumeUnit = "L" | "%" | "m³" | "ml" | "gal";
-export type TemperatureUnit = "°C" | "°F";
+export type VolumeUnit =
+  | "L"
+  | "l"
+  | "liter"
+  | "liters"
+  | "ml"
+  | "mL"
+  | "gal"
+  | "gallon"
+  | "gallons"
+  | "m³"
+  | "%";
+
+export type TemperatureUnit = "°C" | "°F" | "C" | "F";
 
 /**
  * Converts mA reading to Liters based on tank capacity.
@@ -21,14 +33,20 @@ export function convertMaToLiters(mA: number, capacityLiters: number): number {
 export function convertFromLiters(liters: number, unit: VolumeUnit, capacityLiters: number): number {
   switch (unit) {
     case "L":
+    case "l":
+    case "liter":
+    case "liters":
       return liters;
     case "%":
       return capacityLiters > 0 ? (liters / capacityLiters) * 100 : 0;
     case "m³":
       return liters / 1000;
     case "ml":
+    case "mL":
       return liters * 1000;
     case "gal":
+    case "gallon":
+    case "gallons":
       return liters * 0.264172;
     default:
       return liters;
@@ -41,14 +59,20 @@ export function convertFromLiters(liters: number, unit: VolumeUnit, capacityLite
 export function convertToLiters(value: number, unit: VolumeUnit, capacityLiters: number): number {
   switch (unit) {
     case "L":
+    case "l":
+    case "liter":
+    case "liters":
       return value;
     case "%":
       return (value / 100) * capacityLiters;
     case "m³":
       return value * 1000;
     case "ml":
+    case "mL":
       return value / 1000;
     case "gal":
+    case "gallon":
+    case "gallons":
       return value / 0.264172;
     default:
       return value;
@@ -74,7 +98,13 @@ export function convertFtoC(f: number): number {
  */
 export function convertTemperature(value: number, from: TemperatureUnit, to: TemperatureUnit): number {
   if (from === to) return value;
-  if (from === "°C" && to === "°F") return convertCtoF(value);
-  if (from === "°F" && to === "°C") return convertFtoC(value);
+  
+  const fromNorm = (from === "°C" || from === "C") ? "°C" : "°F";
+  const toNorm = (to === "°C" || to === "C") ? "°C" : "°F";
+
+  if (fromNorm === toNorm) return value;
+  if (fromNorm === "°C" && toNorm === "°F") return convertCtoF(value);
+  if (fromNorm === "°F" && toNorm === "°C") return convertFtoC(value);
+  
   return value;
 }

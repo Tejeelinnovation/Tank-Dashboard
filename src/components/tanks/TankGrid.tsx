@@ -3,7 +3,7 @@
 import * as React from "react";
 import TankCard from "./TankCard";
 import type { TankAlarmLimits } from "@/types/alarm";
-import type { VolumeUnit, TemperatureUnit } from "@/lib/companySetupClient";
+import { type VolumeUnit, type TemperatureUnit } from "@/lib/conversions";
 
 export type Tank = {
   id: string;

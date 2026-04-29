@@ -1,7 +1,11 @@
 "use client";
 
-export type VolumeUnit = "L" | "%" | "m³";
-export type TemperatureUnit = "°C" | "°F";
+import { type VolumeUnit, type TemperatureUnit, convertFromLiters } from "./conversions";
+
+// Re-export for external use
+export type { VolumeUnit, TemperatureUnit };
+export { convertFromLiters };
+
 export type TankMetricType = "volume" | "temperature";
 export type TankMetricUnit = VolumeUnit | TemperatureUnit;
 
@@ -28,7 +32,7 @@ export type SavedSetup = {
   updatedAt: string;
 };
 
-export const VOLUME_UNITS: VolumeUnit[] = ["L", "%", "m³"];
+export const VOLUME_UNITS: VolumeUnit[] = ["L", "m³", "ml", "gal", "%"];
 export const TEMPERATURE_UNITS: TemperatureUnit[] = ["°C", "°F"];
 
 function clamp(n: number, min: number, max: number) {
@@ -133,16 +137,7 @@ export function litersToVolumeUnit(
   tank: Pick<TankSetupItem, "capacityLiters">,
   unit: VolumeUnit
 ) {
-  if (!Number.isFinite(liters)) return 0;
-
-  if (unit === "L") return liters;
-  if (unit === "%") {
-    if (!(tank.capacityLiters > 0)) return 0;
-    return (liters / tank.capacityLiters) * 100;
-  }
-  if (unit === "m³") return liters / 1000;
-
-  return liters;
+  return convertFromLiters(liters, unit, tank.capacityLiters);
 }
 
 export function getVolumePercentFromMetric(
@@ -161,15 +156,15 @@ export function getTemperatureCFromMetric(
 ) {
   if (!Number.isFinite(rawValue)) return undefined;
 
-  if (metric.unit === "°C") return rawValue;
-  if (metric.unit === "°F") return ((rawValue - 32) * 5) / 9;
+  if (metric.unit === "°C" || metric.unit === "C") return rawValue;
+  if (metric.unit === "°F" || metric.unit === "F") return ((rawValue - 32) * 5) / 9;
 
   return undefined;
 }
 
 export function cToTemperatureUnit(valueC: number, unit: TemperatureUnit) {
   if (!Number.isFinite(valueC)) return 0;
-  if (unit === "°F") return (valueC * 9) / 5 + 32;
+  if (unit === "°F" || unit === "F") return (valueC * 9) / 5 + 32;
   return valueC;
 }
 
