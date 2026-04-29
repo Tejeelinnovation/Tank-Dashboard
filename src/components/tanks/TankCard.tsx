@@ -136,8 +136,8 @@ export default function TankCard({
       ].join(" ")}
     >
       <div className="mb-3 flex items-start justify-between">
-        <div>
-          <h2 className="font-semibold text-black dark:text-white">{name}</h2>
+        <div className="min-w-0">
+          <h2 className="font-semibold text-black dark:text-white truncate" title={name}>{name}</h2>
 
           <p className="mt-0.5 text-xs text-black/60 dark:text-white/60" suppressHydrationWarning>
             Temp: {tempText}

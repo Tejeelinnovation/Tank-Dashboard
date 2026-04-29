@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/postgres";
 import { getCompanySessionId } from "@/lib/companyAuth";
@@ -83,7 +85,7 @@ export async function GET(req: NextRequest) {
 
     const companyRes = await pool.query(
       `
-      select id, name, slug, tanks_count, tank_capacities, data_mode
+      select id, name, slug, tanks_count, tank_capacities, data_mode, pwd_reset_requested, pwd_reset_approved
       from companies
       where id = $1
       limit 1

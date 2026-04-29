@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { useVisibilityPolling } from "@/lib/useVisibilityPolling";
 import TankGrid, { type Tank, type AlarmEvent } from "@/components/tanks/TankGrid";
 import type { TankAlarmLimits } from "@/types/alarm";
 import TopHero from "@/components/ui/TopHero";
@@ -91,156 +92,67 @@ export default function CompanyDashboardPage() {
     return tanks.find((t) => String(t.id) === String(openTankId)) ?? null;
   }, [tanks, openTankId]);
 
-  async function load() {
+  const loadSettings = useCallback(async () => {
     if (!slug) return;
-
-    setErr("");
-
     try {
-      const settingsRes = await fetch(
-  `/api/company/settings?slug=${encodeURIComponent(slug)}`,
-  {
-    cache: "no-store",
-  }
-);
+      const settingsRes = await fetch(`/api/company/settings?slug=${encodeURIComponent(slug)}`, { cache: "no-store" });
       const settingsJson = await settingsRes.json().catch(() => ({}));
+      if (!settingsRes.ok || !settingsJson?.ok) return;
 
-      if (!settingsRes.ok || !settingsJson?.ok) {
-        setErr(settingsJson?.error || "Failed to load company settings");
-        setTanks([]);
-        setSetupTanks([]);
-        setAlarmMap({});
-        return;
-      }
+      const tanksCount = clamp(Number(settingsJson?.company?.tanksCount ?? 4), 1, 20);
+      const tankCapacities = settingsJson?.company?.tankCapacities ?? [];
+      const settingsRows = settingsJson?.tanks ?? [];
 
-      const tanksCount = clamp(
-        Number(
-          settingsJson?.company?.tanks_count ??
-            settingsJson?.company?.tanksCount ??
-            4
-        ),
-        1,
-        20
-      );
-
-      const tankCapacities = Array.isArray(settingsJson?.company?.tank_capacities)
-        ? settingsJson.company.tank_capacities
-        : Array.isArray(settingsJson?.company?.tankCapacities)
-        ? settingsJson.company.tankCapacities
-        : [];
-
-      const settingsRows = Array.isArray(settingsJson?.tanks)
-        ? settingsJson.tanks
-        : [];
-
-      const normalizedSetup: TankSetupItem[] = Array.from(
-        { length: tanksCount },
-        (_, i) => {
-          const row = settingsRows[i];
-
-          if (!row) {
-            return {
-              ...makeDefaultTank(i),
-              capacityLiters: Number(tankCapacities[i]) || 1000,
-            };
-          }
-
-          return {
-            id: String(row.id ?? `tank-${i + 1}`),
-            name: String(
-              row.tank_name ?? row.name ?? `Tank ${i + 1}`
-            ).trim(),
-            capacityLiters:
-              Number(row.capacity_liters ?? row.capacityLiters) ||
-              Number(tankCapacities[i]) ||
-              1000,
-            variant: "rect",
-            metrics: [
-              {
-                channel: String(
-                  row.volume_channel ?? row.volumeChannel ?? `CH${i * 2 + 1}`
-                ).trim(),
-                type: "volume",
-                unit: (String(
-                  row.volume_unit ?? row.volumeUnit ?? "L"
-                ).trim() || "L") as VolumeUnit,
-              },
-              {
-                channel: String(
-                  row.temperature_channel ??
-                    row.temperatureChannel ??
-                    `CH${i * 2 + 2}`
-                ).trim(),
-                type: "temperature",
-                unit: (String(
-                  row.temperature_unit ?? row.temperatureUnit ?? "°C"
-                ).trim() || "°C") as TemperatureUnit,
-              },
-            ],
-          };
-        }
-      );
-
+      const normalizedSetup: TankSetupItem[] = Array.from({ length: tanksCount }, (_, i) => {
+        const row = settingsRows[i];
+        if (!row) return { ...makeDefaultTank(i), capacityLiters: Number(tankCapacities[i]) || 1000 };
+        return {
+          id: String(row.id ?? `tank-${i + 1}`),
+          name: String(row.name ?? `Tank ${i + 1}`).trim(),
+          capacityLiters: Number(row.capacityLiters) || Number(tankCapacities[i]) || 1000,
+          metrics: [
+            { 
+               channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(), 
+               type: "volume", 
+               unit: (String(row.volumeUnit || "L").trim()) as VolumeUnit 
+            },
+            { 
+               channel: String(row.temperatureChannel ?? `CH${i * 2 + 2}`).trim(), 
+               type: "temperature", 
+               unit: (String(row.temperatureUnit || "°C").trim()) as TemperatureUnit 
+            },
+          ]
+        };
+      });
       setSetupTanks(normalizedSetup);
-      setAlarmMap(
-        settingsJson?.alarms && typeof settingsJson.alarms === "object"
-          ? settingsJson.alarms
-          : {}
-      );
+      setAlarmMap(settingsJson?.alarms || {});
+    } catch (e) { console.error("Failed to load settings", e); }
+  }, [slug]);
 
+  const loadData = useCallback(async () => {
+    if (!slug || setupTanks.length === 0) return;
+    try {
       const influxRes = await fetch("/api/influx/latest", { cache: "no-store" });
       const influxJson = await influxRes.json().catch(() => ({}));
-
-      if (!influxRes.ok) {
-        setErr(influxJson?.error || "Failed to load Influx data");
-        setTanks([]);
-        return;
-      }
+      if (!influxRes.ok) throw new Error("Influx failed");
 
       const rows = Array.isArray(influxJson?.rows) ? influxJson.rows : [];
-
-      const mapped: Tank[] = normalizedSetup.map((cfg) => {
+      const mapped: Tank[] = setupTanks.map((cfg) => {
         const volumeMetric = cfg.metrics[0];
         const temperatureMetric = cfg.metrics[1];
-
         const volumeRow = rows.find((r: any) => r.channel === volumeMetric.channel);
-        const temperatureRow = rows.find(
-          (r: any) => r.channel === temperatureMetric.channel
-        );
-
+        const temperatureRow = rows.find((r: any) => r.channel === temperatureMetric.channel);
         const volumeRaw = toNumber(volumeRow?._value);
         const temperatureRaw = toNumber(temperatureRow?._value);
 
         let hasData = false;
         if (volumeRow?._time) {
           const pt = new Date(volumeRow._time).getTime();
-          if (!Number.isNaN(pt) && Date.now() - pt <= 60 * 60 * 1000) {
-            hasData = true;
-          }
+          if (!Number.isNaN(pt) && Date.now() - pt <= 60 * 60 * 1000) hasData = true;
         }
 
-        const volumeLiters =
-          volumeRaw !== undefined
-            ? convertVolumeToLiters(
-                volumeRaw,
-                volumeMetric.unit,
-                cfg.capacityLiters
-              )
-            : 0;
-
-        const level =
-          volumeRaw !== undefined
-            ? getVolumePercent(
-                volumeRaw,
-                volumeMetric.unit,
-                cfg.capacityLiters
-              )
-            : 0;
-
-        const temperatureC =
-          temperatureRaw !== undefined
-            ? convertTemperatureToC(temperatureRaw, temperatureMetric.unit)
-            : undefined;
+        const level = volumeRaw !== undefined ? getVolumePercent(volumeRaw, volumeMetric.unit, cfg.capacityLiters) : 0;
+        const temperatureC = temperatureRaw !== undefined ? convertTemperatureToC(temperatureRaw, temperatureMetric.unit) : undefined;
 
         return {
           id: cfg.id,
@@ -254,40 +166,42 @@ export default function CompanyDashboardPage() {
           volumeUnit: volumeMetric.unit,
           temperatureUnit: temperatureMetric.unit,
           hasData,
-          volumeValue:
-            volumeRaw !== undefined
-              ? Math.round(volumeRaw * 100) / 100
-              : Math.round(volumeLiters),
-          temperatureValue:
-            temperatureRaw !== undefined
-              ? Math.round(temperatureRaw * 10) / 10
-              : undefined,
+          volumeValue: volumeRaw !== undefined ? Math.round(volumeRaw * 100) / 100 : 0,
+          temperatureValue: temperatureRaw !== undefined ? Math.round(temperatureRaw * 10) / 10 : undefined,
         };
       });
 
       setTanks(mapped);
-    } catch {
-      setErr("Network error");
-      setTanks([]);
-      setSetupTanks([]);
-      setAlarmMap({});
-    } finally {
+      setLoading(false);
+    } catch (e) {
+      setErr("Failed to update live data");
       setLoading(false);
     }
-  }
+  }, [slug, setupTanks]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  useEffect(() => {
+    if (setupTanks.length > 0) loadData();
+  }, [setupTanks, loadData]);
+
+  useVisibilityPolling(loadData, 10000);
+
+  useEffect(() => {
+    if (err) {
+      const timer = setTimeout(() => setErr(""), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [err]);
 
   async function logoutCompany() {
     await fetch("/api/company/logout", { method: "POST" }).catch(() => {});
     window.location.href = "/login";
   }
 
-  useEffect(() => {
-    if (!slug) return;
-
-    load();
-    const t = setInterval(load, 15000);
-    return () => clearInterval(t);
-  }, [slug]);
+  // Polling logic moved to useVisibilityPolling above.
 
   return (
     <main className="relative min-h-screen overflow-hidden text-black dark:text-white transition-colors duration-500">
@@ -308,6 +222,9 @@ export default function CompanyDashboardPage() {
           ]}
         />
 
+        {/* Logout and Request Password buttons removed - moved to Setup or top nav */}
+
+
 
 
         <section id="tanks" className="mx-auto max-w-6xl px-6 pb-20 pt-10">
@@ -321,8 +238,8 @@ export default function CompanyDashboardPage() {
             {/* Left side: Tanks */}
             <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2">
               <div className="mb-6 flex items-end justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-black dark:text-white md:text-2xl">
+                <div className="min-w-0">
+                  <h2 className="text-xl font-semibold text-black dark:text-white md:text-2xl truncate">
                     Live Tanks
                   </h2>
                   <p className="mt-1 text-sm text-black/60 dark:text-white/55">

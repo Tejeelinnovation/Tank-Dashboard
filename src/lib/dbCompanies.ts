@@ -15,6 +15,8 @@ export type Company = {
 
   csvPath?: string;
   dataMode: "generated" | "csv" | "disabled";
+  pwd_reset_requested?: boolean;
+  pwd_reset_approved?: boolean;
   createdAt: string;
   updatedAt?: string;
 };
@@ -41,6 +43,8 @@ function mapCompanyRow(row: any): Company {
       : [],
     csvPath: row.csv_path ?? "",
     dataMode: row.data_mode,
+    pwd_reset_requested: !!row.pwd_reset_requested,
+    pwd_reset_approved: !!row.pwd_reset_approved,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -53,6 +57,33 @@ export async function readCompanies(): Promise<{ companies: Company[] }> {
 
   return {
     companies: res.rows.map(mapCompanyRow),
+  };
+}
+
+/**
+ * Lightweight version of readCompanies for the admin dashboard list. 
+ * Excludes heavy or sensitive fields like passwordHash and tankCapacities.
+ */
+export async function readCompaniesSummary(): Promise<{ companies: Partial<Company>[] }> {
+  const res = await pool.query(
+    `select id, name, slug, logo_url, company_login_id, tanks_count, data_mode, pwd_reset_requested, pwd_reset_approved, created_at 
+     from companies 
+     order by created_at desc`
+  );
+
+  return {
+    companies: res.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      logoUrl: row.logo_url ?? "",
+      companyLoginId: row.company_login_id,
+      tanksCount: Number(row.tanks_count ?? 0),
+      dataMode: row.data_mode,
+      pwd_reset_requested: !!row.pwd_reset_requested,
+      pwd_reset_approved: !!row.pwd_reset_approved,
+      createdAt: row.created_at
+    })),
   };
 }
 
@@ -93,9 +124,9 @@ export async function createCompany(input: {
     `
     insert into companies (
       name, slug, logo_url, company_login_id, password_hash,
-      tanks_count, tank_capacities, csv_path, data_mode
+      tanks_count, tank_capacities, csv_path, data_mode, pwd_reset_requested, pwd_reset_approved
     )
-    values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)
+    values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9, $10, $11)
     returning *
     `,
     [
@@ -108,6 +139,8 @@ export async function createCompany(input: {
       JSON.stringify(input.tankCapacities ?? []),
       input.csvPath?.trim() || null,
       input.dataMode ?? "generated",
+      false,
+      false
     ]
   );
 
@@ -126,6 +159,8 @@ export async function updateCompany(
     tankCapacities: number[];
     csvPath: string;
     dataMode: "generated" | "csv" | "disabled";
+    pwd_reset_requested: boolean;
+    pwd_reset_approved: boolean;
   }>
 ): Promise<Company | null> {
   const currentRes = await pool.query(
@@ -149,6 +184,8 @@ export async function updateCompany(
       tank_capacities = $8::jsonb,
       csv_path = $9,
       data_mode = $10,
+      pwd_reset_requested = $11,
+      pwd_reset_approved = $12,
       updated_at = now()
     where id = $1
     returning *
@@ -164,6 +201,8 @@ export async function updateCompany(
       JSON.stringify(input.tankCapacities ?? current.tank_capacities ?? []),
       input.csvPath?.trim() ?? current.csv_path,
       input.dataMode ?? current.data_mode,
+      input.pwd_reset_requested ?? current.pwd_reset_requested,
+      input.pwd_reset_approved ?? current.pwd_reset_approved,
     ]
   );
 

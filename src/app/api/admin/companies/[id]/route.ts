@@ -1,18 +1,21 @@
-import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
+
+import { NextRequest, NextResponse } from "next/server";
 import { isAdminLoggedIn } from "@/lib/auth";
+import bcrypt from "bcryptjs";
 import { deleteCompany, updateCompany } from "@/lib/dbCompanies";
+import { cookies } from "next/headers";
 
 export async function DELETE(
-  _: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const ok = await isAdminLoggedIn();
 
   if (!ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const { id } = await params;
 
   await deleteCompany(id);
 
@@ -20,22 +23,33 @@ export async function DELETE(
 }
 
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const ok = await isAdminLoggedIn();
 
   if (!ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
   const patch: any = {};
-  if (body.hourlyRefreshInterval !== undefined) {
-    patch.hourlyRefreshInterval = Number(body.hourlyRefreshInterval);
+  
+  if (body.password !== undefined) {
+    const pw = String(body.password).trim();
+    if(pw) {
+      patch.passwordHash = await bcrypt.hash(pw, 10);
+      patch.pwd_reset_requested = false;
+      patch.pwd_reset_approved = false;
+    }
   }
+
+  if (body.pwd_reset_approved !== undefined) {
+    patch.pwd_reset_approved = !!body.pwd_reset_approved;
+  }
+
 
   const updated = await updateCompany(id, patch);
 

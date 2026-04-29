@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminLoggedIn } from "@/lib/auth";
 import { updateCompany } from "@/lib/dbCompanies";

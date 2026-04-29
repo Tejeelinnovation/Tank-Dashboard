@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { getCompanySessionId } from "@/lib/companyAuth";
 import { readCompanies } from "@/lib/dbCompanies";

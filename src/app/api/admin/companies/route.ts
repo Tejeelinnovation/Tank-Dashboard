@@ -1,18 +1,12 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { isAdminLoggedIn } from "@/lib/auth";
-import { createCompany, readCompanies, slugify } from "@/lib/dbCompanies";
+import { pool } from "@/lib/postgres";
+import { createCompany, readCompanies, readCompaniesSummary, slugify } from "@/lib/dbCompanies";
 import type { Company } from "@/lib/dbCompanies";
 
-function randomPassword(len = 10) {
-  const chars =
-    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-  let out = "";
-  for (let i = 0; i < len; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return out;
-}
 
 function normalizeLoginId(value: string) {
   return value
@@ -32,7 +26,7 @@ export async function GET() {
     );
   }
 
-  const db = await readCompanies();
+  const db = await readCompaniesSummary();
 
   return NextResponse.json({
     ok: true,
@@ -60,10 +54,6 @@ export async function POST(req: NextRequest) {
     );
     const tanksCount = Math.max(1, Number(body?.tanksCount || 1));
 
-    const tankCapacities = Array.isArray(body?.tankCapacities)
-      ? body.tankCapacities.map((v: unknown) => Number(v) || 1000)
-      : Array.from({ length: tanksCount }, () => 1000);
-
     if (!name) {
       return NextResponse.json(
         { ok: false, error: "Company name is required" },
@@ -78,30 +68,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const db = await readCompanies();
+    const tankCapacities = Array.isArray(body?.tankCapacities)
+      ? body.tankCapacities.map((v: unknown) => Number(v) || 1000)
+      : Array.from({ length: tanksCount }, () => 1000);
 
     const baseSlug = slugify(name) || "company";
     let finalSlug = baseSlug;
     let slugCounter = 2;
 
-    while (db.companies.some((c: Company) => c.slug === finalSlug)) {
-      finalSlug = `${baseSlug}-${slugCounter}`;
-      slugCounter += 1;
-    }
-
-    const loginExists = db.companies.some(
-      (c: Company) =>
-        String(c.companyLoginId).toLowerCase() === requestedLoginId.toLowerCase()
-    );
-
-    if (loginExists) {
+    // Check if login ID already exists
+    const loginRes = await pool.query("select 1 from companies where company_login_id = $1 limit 1", [requestedLoginId]);
+    if (loginRes.rows.length > 0) {
       return NextResponse.json(
         { ok: false, error: "Company Login ID already exists" },
         { status: 400 }
       );
     }
 
-    const plainPassword = randomPassword(10);
+    // Check if slug exists, and iterate if necessary
+    let slugExists = true;
+    while (slugExists) {
+      const slugRes = await pool.query("select 1 from companies where slug = $1 limit 1", [finalSlug]);
+      if (slugRes.rows.length === 0) {
+          slugExists = false;
+      } else {
+          finalSlug = `${baseSlug}-${slugCounter}`;
+          slugCounter += 1;
+      }
+    }
+
+    const plainPassword = String(body?.password || "").trim();
+    if (!plainPassword) {
+      return NextResponse.json(
+        { ok: false, error: "Password is required" },
+        { status: 400 }
+      );
+    }
     const passwordHash = await bcrypt.hash(plainPassword, 10);
 
     const created = await createCompany({
@@ -118,10 +120,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       company: created,
-      credentials: {
-        loginId: requestedLoginId,
-        password: plainPassword,
-      },
     });
   } catch (error: any) {
     console.error("Create company error:", error);

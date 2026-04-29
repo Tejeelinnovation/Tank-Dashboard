@@ -1,11 +1,26 @@
-import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 export const COOKIE_NAME = "admin_session";
 
 export async function isAdminLoggedIn() {
-  const store = await cookies();
-  return store.get(COOKIE_NAME)?.value === "true";
+  try {
+    const store = await cookies();
+    const token = store.get(COOKIE_NAME);
+    if (token?.value === "true") return true;
+
+    // Fallback: check headers directly
+    const heads = await headers();
+    const cookieHeader = heads.get("cookie") || "";
+    if (cookieHeader.includes(`${COOKIE_NAME}=true`)) {
+      return true;
+    }
+    
+    console.log(`[auth] admin session check failed. cookie: ${token?.value}, header: ${cookieHeader ? "present" : "missing"}`);
+    return false;
+  } catch (err) {
+    console.error(`[auth] error checking admin session:`, err);
+    return false;
+  }
 }
 
 export async function setAdminSession() {
@@ -31,7 +46,7 @@ export function getAdminLoginId() {
 }
 
 export function getAdminPassword() {
-  return String(process.env.ADMIN_PASSWORD || "").trim();
+  return String(process.env.ADMIN_PASSWORD || "admin").trim();
 }
 
 export function normalizeLoginId(value: string) {

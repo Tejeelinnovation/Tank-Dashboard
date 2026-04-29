@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { useVisibilityPolling } from "@/lib/useVisibilityPolling";
 import BackgroundFX from "@/components/ui/BackgroundFX";
 import TopHero from "@/components/ui/TopHero";
+import PasswordInput from "@/components/ui/PasswordInput";
 import type { AlarmMap, TankAlarmLimits } from "@/types/alarm";
 
 function clamp(n: number, min: number, max: number) {
@@ -197,22 +199,25 @@ export default function CompanySetupPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  useEffect(() => {
-    if (!slug) return;
+  const [pwdResetRequested, setPwdResetRequested] = useState(false);
+  const [pwdResetApproved, setPwdResetApproved] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resettingPwd, setResettingPwd] = useState(false);
 
-    let cancelled = false;
-
-    async function loadFromServer() {
+    const loadFromServer = useCallback(async (silent = false) => {
       try {
-        setInitialLoading(true);
-        setMsg(null);
+        if (!silent) {
+          setInitialLoading(true);
+          setMsg(null);
+        }
 
         const res = await fetch(
-  `/api/company/settings?slug=${encodeURIComponent(slug)}`,
-  {
-    cache: "no-store",
-  }
-);
+          `/api/company/settings?slug=${encodeURIComponent(slug)}&t=${Date.now()}`,
+          {
+            cache: "no-store",
+          }
+        );
 
         const j = await res.json().catch(() => ({}));
 
@@ -294,32 +299,34 @@ export default function CompanySetupPage() {
           countFromCompany
         );
 
-        if (!cancelled) {
-          setTanksCount(countFromCompany);
-          setTanks(nextTanks);
-          setApplyAllCap(nextTanks?.[0]?.capacityLiters ?? 1000);
-          setAlarmMap(nextAlarmMap);
-        }
+        setTanksCount(countFromCompany);
+        setTanks(nextTanks);
+        setApplyAllCap(nextTanks?.[0]?.capacityLiters ?? 1000);
+        setAlarmMap(nextAlarmMap);
+        setPwdResetRequested(!!j?.company?.pwd_reset_requested);
+        setPwdResetApproved(!!j?.company?.pwd_reset_approved);
       } catch (e: any) {
-        if (!cancelled) {
-          setMsg({
-            type: "err",
-            text: e?.message || "Failed to load settings",
-          });
-        }
+        setMsg({
+          type: "err",
+          text: e?.message || "Failed to load settings",
+        });
       } finally {
-        if (!cancelled) {
-          setInitialLoading(false);
-        }
+        setInitialLoading(false);
       }
-    }
+    }, [slug]);
 
-    loadFromServer();
+    useEffect(() => {
+      if (slug) loadFromServer();
+    }, [slug, loadFromServer]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [slug]);
+    useVisibilityPolling(() => loadFromServer(true), 8000);
+
+    useEffect(() => {
+      if (msg) {
+        const timer = setTimeout(() => setMsg(null), 3000);
+        return () => clearTimeout(timer);
+      }
+    }, [msg]);
 
   const totalCapacity = useMemo(
     () =>
@@ -532,17 +539,72 @@ export default function CompanySetupPage() {
     setMsg({ type: "ok", text: "CSV uploaded ✅" });
   }
 
-  return (
-    <main className="relative min-h-screen overflow-hidden text-black dark:text-white transition-colors duration-500">
-      <BackgroundFX />
+  async function handleRequestReset() {
+    if (!confirm("Request admin to allow you to change your password?")) return;
+    setMsg(null);
+    try {
+      const res = await fetch("/api/company/request-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      if (res.ok) {
+        setPwdResetRequested(true);
+        setMsg({ type: "ok", text: "Request sent to admin." });
+      } else {
+        setMsg({ type: "err", text: "Failed to send request." });
+      }
+    } catch {
+      setMsg({ type: "err", text: "Network error." });
+    }
+  }
 
+  async function handlePasswordReset() {
+    if (!newPassword || newPassword.length < 4) {
+      setMsg({ type: "err", text: "New password must be at least 4 characters." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMsg({ type: "err", text: "Passwords do not match." });
+      return;
+    }
+
+    setMsg(null);
+    setResettingPwd(true);
+
+    try {
+      const res = await fetch("/api/company/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword, slug }),
+      });
+      if (res.ok) {
+        setPwdResetRequested(false);
+        setPwdResetApproved(false);
+        setNewPassword("");
+        setConfirmPassword("");
+        setMsg({ type: "ok", text: "Password updated successfully ✅" });
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setMsg({ type: "err", text: j?.error || "Failed to update password." });
+      }
+    } catch {
+      setMsg({ type: "err", text: "Network error." });
+    } finally {
+      setResettingPwd(false);
+    }
+  }
+
+  return (
+    <main className="relative min-h-screen overflow-hidden text-black dark:text-white transition-all duration-500">
+      <BackgroundFX />
       <div className="relative">
         <TopHero
-          brand="Tankco."
+          brand="Ekatva"
           eyebrow="COMPANY SETUP"
           titleLine1="Configure"
           titleLine2="Your Tanks"
-          subtitle="Metric 1 is fixed as volume and Metric 2 is fixed as temperature. Admin only chooses channel, unit, and tank capacity."
+          subtitle="Fixed volume & temperature channels. Admin chooses channel, unit, and capacity."
           navItems={[
             { label: "Setup", href: `/company/${slug}/setup` },
             { label: "Dashboard", href: `/company/${slug}/dashboard` },
@@ -552,28 +614,42 @@ export default function CompanySetupPage() {
 
         <section className="mx-auto max-w-6xl px-6 pb-20 pt-10">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1">
-              <h2 className="text-lg font-semibold text-black dark:text-white">Tank Settings</h2>
-              <p className="mt-1 text-sm text-black/60 dark:text-white/55">
-                Set tank count, names, fixed volume/temperature channels, units, capacities, and alarms.
-              </p>
+            <div className="lg:col-span-1 space-y-6">
+              {/* Security Card */}
+              <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+                <h3 className="text-sm font-semibold">Security</h3>
+                {!pwdResetRequested && !pwdResetApproved && (
+                  <button onClick={handleRequestReset} className="mt-3 w-full rounded-xl bg-black/5 dark:bg-white/5 py-2 text-xs font-bold border border-black/10 hover:bg-black/10 transition">Request Password Change</button>
+                )}
+                {pwdResetRequested && !pwdResetApproved && (
+                  <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600">Waiting for admin approval...</div>
+                )}
+                {pwdResetApproved && (
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-600 font-medium">Approved! Set new password:</div>
+                    <PasswordInput value={newPassword} onChange={setNewPassword} placeholder="New Password" className="!py-2 !text-xs" />
+                    <PasswordInput value={confirmPassword} onChange={setConfirmPassword} placeholder="Confirm Password" className="!py-2 !text-xs" />
+                    <button onClick={handlePasswordReset} disabled={resettingPwd} className="w-full rounded-xl bg-black dark:bg-white py-2 text-xs font-bold text-white dark:text-black transition-opacity hover:opacity-90">{resettingPwd ? "Updating..." : "Update Password"}</button>
+                  </div>
+                )}
+              </div>
 
-              {initialLoading && (
-                <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/70">
-                  Loading saved settings…
-                </div>
-              )}
+              {/* Tank Settings Card */}
+              <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+                <h2 className="text-lg font-semibold">Tank Settings</h2>
+                <p className="mt-1 text-sm text-black/60 dark:text-white/55">Set counts, names & alarms.</p>
+
+                {initialLoading && (
+                  <div className="mt-4 rounded-xl bg-black/5 dark:bg-white/5 p-3 text-xs text-black/50 dark:text-white/50">Loading settings…</div>
+                )}
 
               <div className="mt-6">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm text-black/70 dark:text-white/70">Number of tanks</label>
-                  <div className="text-sm font-semibold">{tanksCount}</div>
+                <div className="flex justify-between text-sm">
+                  <span>Tanks count</span>
+                  <span className="font-bold">{tanksCount}</span>
                 </div>
-
                 <input
-                  type="range"
-                  min={1}
-                  max={20}
+                  type="range" min={1} max={20}
                   value={tanksCount}
                   onChange={(e) => {
                     const n = clamp(Number(e.target.value), 1, 20);
@@ -582,306 +658,157 @@ export default function CompanySetupPage() {
                   }}
                   className="mt-3 w-full"
                 />
-
-                <div className="mt-3 text-xs text-black/50 dark:text-white/50">
-                  Total capacity: <span className="text-black/80 dark:text-white/80">{totalCapacity.toLocaleString()}</span> L
-                </div>
               </div>
 
-              <div className="mt-6 rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/20 p-4">
-                <div className="text-sm font-medium">Apply capacity to all tanks</div>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={applyAllCap}
-                    onChange={(e) => setApplyAllCap(Number(e.target.value))}
-                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-black dark:text-white outline-none"
-                    placeholder="Capacity for all tanks (L)"
-                  />
-                  <button
-                    onClick={applyToAllCap}
-                    className="rounded-xl bg-black dark:bg-white px-4 py-2 text-sm font-semibold text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 transition"
-                  >
-                    Apply
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/20 p-4">
-                <div className="text-sm font-medium">Apply alarm limits to all tanks</div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <input
-                    value={applyAllMinVol}
-                    onChange={(e) => setApplyAllMinVol(e.target.value)}
-                    placeholder="Min Volume (L)"
-                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                  />
-                  <input
-                    value={applyAllMaxVol}
-                    onChange={(e) => setApplyAllMaxVol(e.target.value)}
-                    placeholder="Max Volume (L)"
-                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                  />
-                  <input
-                    value={applyAllMinTemp}
-                    onChange={(e) => setApplyAllMinTemp(e.target.value)}
-                    placeholder="Min Temp (°C)"
-                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                  />
-                  <input
-                    value={applyAllMaxTemp}
-                    onChange={(e) => setApplyAllMaxTemp(e.target.value)}
-                    placeholder="Max Temp (°C)"
-                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                  />
+              <div className="mt-6 space-y-4">
+                <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 bg-black/5 dark:bg-black/20">
+                  <div className="text-sm font-medium">Bulk Capacity</div>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="number" value={applyAllCap}
+                      onChange={(e) => setApplyAllCap(Number(e.target.value))}
+                      className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none backdrop-blur-sm"
+                    />
+                    <button onClick={applyToAllCap} className="rounded-xl bg-black dark:bg-white px-4 py-2 text-sm font-bold text-white dark:text-black hover:opacity-90">Apply</button>
+                  </div>
                 </div>
 
-                <button
-                  onClick={applyLimitsToAll}
-                  className="mt-3 w-full rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/10 px-4 py-2 text-xs text-black/90 dark:text-white/90 hover:bg-black/10 dark:hover:bg-white/15 transition"
-                >
-                  Apply limits to all tanks
-                </button>
-
-                <div className="mt-2 text-[11px] text-black/50 dark:text-white/50">
-                  Leave a field blank to not set that limit.
+                <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 bg-black/5 dark:bg-black/20">
+                  <div className="text-sm font-medium">Bulk Alarm Limits</div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <input value={applyAllMinVol} onChange={(e) => setApplyAllMinVol(e.target.value)} placeholder="Min Vol" className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm" />
+                    <input value={applyAllMaxVol} onChange={(e) => setApplyAllMaxVol(e.target.value)} placeholder="Max Vol" className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm" />
+                    <input value={applyAllMinTemp} onChange={(e) => setApplyAllMinTemp(e.target.value)} placeholder="Min Temp" className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm" />
+                    <input value={applyAllMaxTemp} onChange={(e) => setApplyAllMaxTemp(e.target.value)} placeholder="Max Temp" className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm" />
+                  </div>
+                  <button onClick={applyLimitsToAll} className="mt-3 w-full rounded-xl bg-black/5 dark:bg-white/10 py-2 border border-black/10 font-bold hover:bg-black/10 transition text-xs">Apply to all</button>
                 </div>
               </div>
 
               <div className="mt-6">
-                <div className="text-sm font-medium">CSV Upload (optional)</div>
-                <p className="mt-1 text-xs text-black/55 dark:text-white/55">
-                  CSV headers: <span className="text-black/80 dark:text-white/80">TankName, Level, Temp</span>
-                </p>
-
+                <div className="text-sm font-medium">CSV Data Import</div>
                 <input
-                  type="file"
-                  accept=".csv"
-                  disabled={uploading}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) uploadCSV(f);
-                  }}
-                  className="mt-3 block w-full text-xs text-black/70 dark:text-white/70 file:mr-4 file:rounded-xl file:border file:border-black/10 dark:file:border-0 file:bg-white file:px-4 file:py-2 file:text-xs file:font-semibold file:text-black hover:file:opacity-90 transition"
+                  type="file" accept=".csv" disabled={uploading}
+                  onChange={(e) => { const f = e.target.files?.[0]; if(f) uploadCSV(f); }}
+                  className="mt-2 text-xs w-full file:mr-4 file:rounded-xl file:border file:border-black/10 dark:file:border-white/10 file:bg-black/5 dark:file:bg-white/10 file:backdrop-blur-md file:px-4 file:py-2 file:text-black dark:file:text-white hover:file:bg-black/10 dark:hover:file:bg-white/20 transition cursor-pointer"
                 />
-                {uploading && <div className="mt-2 text-xs text-black/60 dark:text-white/60">Uploading…</div>}
               </div>
 
+
               {msg && (
-                <div
-                  className={[
-                    "mt-6 rounded-xl border px-4 py-3 text-sm",
-                    msg.type === "ok"
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                      : "border-red-500/30 bg-red-500/10 text-red-300",
-                  ].join(" ")}
-                >
+                <div className={`mt-6 rounded-xl border p-3 text-xs font-medium animate-in fade-in slide-in-from-top-2 duration-300 ${msg.type === "ok" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600" : "bg-red-500/10 border-red-500/30 text-red-600"}`}>
                   {msg.text}
                 </div>
               )}
 
-              <button
-                onClick={saveAndGo}
-                disabled={saving || initialLoading}
-                className="mt-6 w-full rounded-2xl bg-black dark:bg-white py-3 font-semibold text-white dark:text-black disabled:opacity-60 transition"
-              >
-                {saving ? "Saving…" : "Save & Go to Dashboard"}
+              <button onClick={saveAndGo} disabled={saving || initialLoading} className="mt-6 w-full rounded-2xl bg-black dark:bg-white py-3 font-bold text-white dark:text-black shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50">
+                {saving ? "Saving…" : "Save & Continue"}
               </button>
-
-              <a
-                href={`/company/${slug}/dashboard`}
-                className="mt-3 block text-center text-xs text-black/60 dark:text-white/60 hover:text-black/80 dark:hover:text-white/80 transition"
-              >
-                Skip → Open Dashboard
+              
+              <a href={`/company/${slug}/dashboard`} className="mt-4 block text-center text-xs text-black/40 dark:text-white/40 hover:text-black/60 dark:hover:text-white/60 transition">
+                Skip to Dashboard →
               </a>
             </div>
+          </div>
 
-            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2">
-              <div className="flex items-end justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-black dark:text-white">Per Tank Settings</h2>
-                  <p className="mt-1 text-sm text-black/55 dark:text-white/55">
-                    Capacity is used to convert L, %, or m³ into actual fill percentage and liters.
-                  </p>
-                </div>
-                <div className="text-xs text-black/50 dark:text-white/50">{tanksCount} tanks</div>
-              </div>
-
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2 overflow-y-auto max-h-[1200px]">
+              <h2 className="text-lg font-semibold">Individual Tank Configuration</h2>
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {Array.from({ length: tanksCount }).map((_, i) => {
                   const key = tankKey(i);
-                  const lim = cleanLimits((alarmMap[key] ?? {}) as TankAlarmLimits);
                   const tank = tanks[i] ?? makeDefaultTank(i);
-
+                  const lim = cleanLimits((alarmMap[key] ?? {}) as TankAlarmLimits);
+                  
                   return (
-                    <div
-                      key={key}
-                      className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/20 p-4"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold">{key}</div>
-                        <div className="text-xs text-black/50 dark:text-white/50">
-                          {isEmptyLimits(lim) ? "No limits" : "Limits set"}
-                        </div>
+                    <div key={key} className="rounded-2xl border border-black/10 dark:border-white/10 p-5 bg-black/5 dark:bg-black/20 text-xs">
+                      <div className="flex justify-between items-center font-bold mb-4 border-b border-black/5 dark:border-white/5 pb-2">
+                        <span className="text-sm">{key}</span>
+                        {!isEmptyLimits(lim) && <span className="text-[10px] bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full">Limits Active</span>}
                       </div>
-
-                      <div className="mt-3">
-                        <div className="text-xs text-black/55 dark:text-white/55">Tank name</div>
-                        <input
-                          type="text"
-                          value={tank.name}
-                          onChange={(e) => updateTankField(i, "name", e.target.value)}
-                          className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                        />
-                      </div>
-
-                      <div className="mt-3">
-                        <div className="text-xs text-black/55 dark:text-white/55">Capacity (L)</div>
-                        <input
-                          type="number"
-                          value={tank.capacityLiters}
-                          onChange={(e) =>
-                            updateTankField(
-                              i,
-                              "capacityLiters",
-                              clamp(Number(e.target.value) || 0, 1, 1_000_000)
-                            )
-                          }
-                          className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                        />
-                      </div>
-
-                      <div className="mt-4 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3">
-                        <div className="text-xs font-medium text-black/80 dark:text-white/80">Metric 1 — Volume</div>
-
-                        <div className="mt-2">
-                          <div className="text-xs text-black/55 dark:text-white/55">Channel</div>
-                          <select
-                            value={tank.metrics[0].channel}
-                            onChange={(e) => updateVolumeMetricField(i, "channel", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                          >
-                            {Array.from({ length: 24 }, (_, idx) => `CH${idx + 1}`).map((ch) => (
-                              <option key={ch} value={ch}>
-                                {ch}
-                              </option>
-                            ))}
-                          </select>
+                      
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <span className="opacity-60 block mb-1">Display Name</span>
+                            <input value={tank.name} onChange={(e) => updateTankField(i, "name", e.target.value)} className="w-full border border-black/10 rounded-xl px-3 py-2 bg-black/5 dark:bg-black/30 transition-shadow focus:shadow-md outline-none backdrop-blur-sm shadow-inner" />
+                          </div>
+                          <div>
+                            <span className="opacity-60 block mb-1">Capacity (L)</span>
+                            <input type="number" value={tank.capacityLiters} onChange={(e) => updateTankField(i, "capacityLiters", Number(e.target.value))} className="w-full border border-black/10 rounded-xl px-3 py-2 bg-black/5 dark:bg-black/30 outline-none backdrop-blur-sm shadow-inner" />
+                          </div>
                         </div>
 
-                        <div className="mt-3">
-                          <div className="text-xs text-black/55 dark:text-white/55">Unit</div>
-                          <select
-                            value={tank.metrics[0].unit}
-                            onChange={(e) => updateVolumeMetricField(i, "unit", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                          >
-                            {VOLUME_UNITS.map((unit) => (
-                              <option key={unit} value={unit}>
-                                {unit}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5">
+                            <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">Metric 1 (Vol)</span>
+                            <div>
+                                <span className="text-[10px] opacity-60">Channel</span>
+                                <select value={tank.metrics[0].channel} onChange={(e) => updateVolumeMetricField(i, "channel", e.target.value)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
+                                    {Array.from({length:24}, (_, idx) => `CH${idx+1}`).map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <span className="text-[10px] opacity-60">Unit</span>
+                                <select value={tank.metrics[0].unit} onChange={(e) => updateVolumeMetricField(i, "unit", e.target.value as VolumeUnit)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
+                                    {VOLUME_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                </select>
+                            </div>
+                          </div>
 
-                      <div className="mt-4 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3">
-                        <div className="text-xs font-medium text-black/80 dark:text-white/80">
-                          Metric 2 — Temperature
-                        </div>
-
-                        <div className="mt-2">
-                          <div className="text-xs text-black/55 dark:text-white/55">Channel</div>
-                          <select
-                            value={tank.metrics[1].channel}
-                            onChange={(e) => updateTemperatureMetricField(i, "channel", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                          >
-                            {Array.from({ length: 24 }, (_, idx) => `CH${idx + 1}`).map((ch) => (
-                              <option key={ch} value={ch}>
-                                {ch}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5">
+                            <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">Metric 2 (Temp)</span>
+                            <div>
+                                <span className="text-[10px] opacity-60">Channel</span>
+                                <select value={tank.metrics[1].channel} onChange={(e) => updateTemperatureMetricField(i, "channel", e.target.value)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
+                                    {Array.from({length:24}, (_, idx) => `CH${idx+1}`).map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <span className="text-[10px] opacity-60">Unit</span>
+                                <select value={tank.metrics[1].unit} onChange={(e) => updateTemperatureMetricField(i, "unit", e.target.value as TemperatureUnit)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
+                                    {TEMPERATURE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                </select>
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="mt-3">
-                          <div className="text-xs text-black/55 dark:text-white/55">Unit</div>
-                          <select
-                            value={tank.metrics[1].unit}
-                            onChange={(e) => updateTemperatureMetricField(i, "unit", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                          >
-                            {TEMPERATURE_UNITS.map((unit) => (
-                              <option key={unit} value={unit}>
-                                {unit}
-                              </option>
-                            ))}
-                          </select>
+                        <div>
+                            <span className="opacity-60 block mb-2 font-medium">Alarm Limits (Thresholds)</span>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                                <div className="space-y-1">
+                                    <span className="text-[10px] opacity-50">Min Volume</span>
+                                    <input value={typeof lim.minVolumeL === "number" ? String(lim.minVolumeL) : ""} onChange={(e) => updateTankLimit(i, { minVolumeL: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[10px] opacity-50">Max Volume</span>
+                                    <input value={typeof lim.maxVolumeL === "number" ? String(lim.maxVolumeL) : ""} onChange={(e) => updateTankLimit(i, { maxVolumeL: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[10px] opacity-50">Min Temp (°C)</span>
+                                    <input value={typeof lim.minTempC === "number" ? String(lim.minTempC) : ""} onChange={(e) => updateTankLimit(i, { minTempC: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[10px] opacity-50">Max Temp (°C)</span>
+                                    <input value={typeof lim.maxTempC === "number" ? String(lim.maxTempC) : ""} onChange={(e) => updateTankLimit(i, { maxTempC: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
+                                </div>
+                            </div>
                         </div>
-                      </div>
-
-                      <div className="mt-3">
-                        <div className="text-xs text-black/55 dark:text-white/55">Volume limits</div>
-                        <div className="mt-1 grid grid-cols-2 gap-2">
-                          <input
-                            value={typeof lim.minVolumeL === "number" ? String(lim.minVolumeL) : ""}
-                            onChange={(e) =>
-                              updateTankLimit(i, { minVolumeL: numOrUndef(e.target.value) })
-                            }
-                            placeholder="Min"
-                            className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                          />
-                          <input
-                            value={typeof lim.maxVolumeL === "number" ? String(lim.maxVolumeL) : ""}
-                            onChange={(e) =>
-                              updateTankLimit(i, { maxVolumeL: numOrUndef(e.target.value) })
-                            }
-                            placeholder="Max"
-                            className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="mt-3">
-                        <div className="text-xs text-black/55 dark:text-white/55">Temp limits (°C)</div>
-                        <div className="mt-1 grid grid-cols-2 gap-2">
-                          <input
-                            value={typeof lim.minTempC === "number" ? String(lim.minTempC) : ""}
-                            onChange={(e) =>
-                              updateTankLimit(i, { minTempC: numOrUndef(e.target.value) })
-                            }
-                            placeholder="Min"
-                            className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                          />
-                          <input
-                            value={typeof lim.maxTempC === "number" ? String(lim.maxTempC) : ""}
-                            onChange={(e) =>
-                              updateTankLimit(i, { maxTempC: numOrUndef(e.target.value) })
-                            }
-                            placeholder="Max"
-                            className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/30 px-3 py-2 text-xs text-black dark:text-white outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="mt-3 text-[11px] text-black/45 dark:text-white/45">
-                        Metric 1 is fixed as volume and Metric 2 is fixed as temperature.
                       </div>
                     </div>
                   );
                 })}
               </div>
-
-              <div className="mt-6 rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/20 p-4 text-xs text-black/55 dark:text-white/55">
-                <div className="font-semibold text-black/80 dark:text-white/80">How it works</div>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  <li>Metric 1 is always volume and Metric 2 is always temperature.</li>
-                  <li>Admin only selects the channel and the unit for each metric.</li>
-                  <li>Volume history and live values are converted correctly from L, %, or m³.</li>
-                  <li>Temperature history and live values are converted correctly from °F to °C when needed.</li>
-                  <li>Shape is fixed to rectangle for all tanks.</li>
-                </ul>
+              
+              <div className="mt-8 rounded-2xl p-6 bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 text-xs space-y-3">
+                  <h4 className="font-bold opacity-80 uppercase tracking-widest text-[10px]">Technical Information</h4>
+                  <p className="opacity-60 leading-relaxed">
+                      All tanks are configured with dual-metric tracking. Volume measurements are normalized to Liters for analytics, while temperature is tracked in Celsius. Calibration logic automatically handles unit conversion based on your selections.
+                  </p>
+                  <ul className="list-disc pl-4 opacity-50 space-y-1">
+                      <li>Metric 1: High-precision volume/level tracking.</li>
+                      <li>Metric 2: Thermal monitoring and compensation.</li>
+                      <li>Scaling: 1-20 tanks per industrial instance.</li>
+                  </ul>
               </div>
             </div>
           </div>

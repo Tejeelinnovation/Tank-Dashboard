@@ -54,10 +54,10 @@ export default function BackgroundFX() {
 
     // Slower, calmer color cycling
     const controls = [
-      animate(hueA, 330, { duration: 34, repeat: Infinity, ease: "linear" }),
-      animate(hueB, 395, { duration: 20, repeat: Infinity, ease: "linear" }),
-      animate(hueC, 450, { duration: 24, repeat: Infinity, ease: "linear" }),
-      animate(hueD, 520, { duration: 28, repeat: Infinity, ease: "linear" }),
+      animate(hueA, 330, { duration: 34, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }),
+      animate(hueB, 395, { duration: 20, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }),
+      animate(hueC, 450, { duration: 24, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }),
+      animate(hueD, 520, { duration: 28, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }),
     ];
 
     return () => controls.forEach((c) => c.stop());
