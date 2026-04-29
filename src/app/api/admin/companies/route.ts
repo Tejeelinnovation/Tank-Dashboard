@@ -4,9 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { isAdminLoggedIn } from "@/lib/auth";
 import { pool } from "@/lib/postgres";
-import { createCompany, readCompanies, readCompaniesSummary, slugify } from "@/lib/dbCompanies";
-import type { Company } from "@/lib/dbCompanies";
-
+import { createCompany, readCompaniesSummary, slugify } from "@/lib/dbCompanies";
 
 function normalizeLoginId(value: string) {
   return value
@@ -18,55 +16,27 @@ function normalizeLoginId(value: string) {
 
 export async function GET() {
   const ok = await isAdminLoggedIn();
-
-  if (!ok) {
-    return NextResponse.json(
-      { ok: false, error: "Unauthorized" },
-      { status: 401 }
-    );
-  }
-
+  if (!ok) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   const db = await readCompaniesSummary();
-
-  return NextResponse.json({
-    ok: true,
-    companies: db.companies,
-  });
+  return NextResponse.json({ ok: true, companies: db.companies });
 }
 
 export async function POST(req: NextRequest) {
   const ok = await isAdminLoggedIn();
-
-  if (!ok) {
-    return NextResponse.json(
-      { ok: false, error: "Unauthorized" },
-      { status: 401 }
-    );
-  }
+  if (!ok) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
   try {
     const body = await req.json();
-
     const name = String(body?.name || "").trim();
     const logoUrl = String(body?.logoUrl || "").trim();
-    const requestedLoginId = normalizeLoginId(
-      String(body?.companyLoginId || "")
-    );
+    const requestedLoginId = normalizeLoginId(String(body?.companyLoginId || ""));
     const tanksCount = Math.max(1, Number(body?.tanksCount || 1));
+    const influxOrg = String(body?.influxOrg || "").trim();
+    const influxBucket = String(body?.influxBucket || "").trim();
 
-    if (!name) {
-      return NextResponse.json(
-        { ok: false, error: "Company name is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!requestedLoginId) {
-      return NextResponse.json(
-        { ok: false, error: "Company Login ID is required" },
-        { status: 400 }
-      );
-    }
+    if (!name) return NextResponse.json({ ok: false, error: "Company name is required" }, { status: 400 });
+    if (!requestedLoginId) return NextResponse.json({ ok: false, error: "Company Login ID is required" }, { status: 400 });
+    if (!influxOrg || !influxBucket) return NextResponse.json({ ok: false, error: "Influx Organization and Bucket are required" }, { status: 400 });
 
     const tankCapacities = Array.isArray(body?.tankCapacities)
       ? body.tankCapacities.map((v: unknown) => Number(v) || 1000)
@@ -76,34 +46,18 @@ export async function POST(req: NextRequest) {
     let finalSlug = baseSlug;
     let slugCounter = 2;
 
-    // Check if login ID already exists
     const loginRes = await pool.query("select 1 from companies where company_login_id = $1 limit 1", [requestedLoginId]);
-    if (loginRes.rows.length > 0) {
-      return NextResponse.json(
-        { ok: false, error: "Company Login ID already exists" },
-        { status: 400 }
-      );
-    }
+    if (loginRes.rows.length > 0) return NextResponse.json({ ok: false, error: "Company Login ID already exists" }, { status: 400 });
 
-    // Check if slug exists, and iterate if necessary
     let slugExists = true;
     while (slugExists) {
       const slugRes = await pool.query("select 1 from companies where slug = $1 limit 1", [finalSlug]);
-      if (slugRes.rows.length === 0) {
-          slugExists = false;
-      } else {
-          finalSlug = `${baseSlug}-${slugCounter}`;
-          slugCounter += 1;
-      }
+      if (slugRes.rows.length === 0) slugExists = false;
+      else { finalSlug = `${baseSlug}-${slugCounter}`; slugCounter += 1; }
     }
 
     const plainPassword = String(body?.password || "").trim();
-    if (!plainPassword) {
-      return NextResponse.json(
-        { ok: false, error: "Password is required" },
-        { status: 400 }
-      );
-    }
+    if (!plainPassword) return NextResponse.json({ ok: false, error: "Password is required" }, { status: 400 });
     const passwordHash = await bcrypt.hash(plainPassword, 10);
 
     const created = await createCompany({
@@ -115,36 +69,13 @@ export async function POST(req: NextRequest) {
       tanksCount,
       tankCapacities,
       dataMode: "generated",
+      influxOrg,
+      influxBucket,
     });
 
-    return NextResponse.json({
-      ok: true,
-      company: created,
-    });
+    return NextResponse.json({ ok: true, company: created });
   } catch (error: any) {
     console.error("Create company error:", error);
-
-    const message = String(error?.message || "");
-
-    if (
-      error?.code === "23505" ||
-      message.includes("companies_slug_unique") ||
-      message.includes("companies_login_id_unique") ||
-      message.includes("companies_slug_key") ||
-      message.includes("companies_company_login_id_key")
-    ) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Slug or Company Login ID already exists",
-        },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      { ok: false, error: "Failed to create company" },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: "Failed to create company" }, { status: 500 });
   }
 }

@@ -125,7 +125,13 @@ export default function FluidTank({
     return d;
   };
 
+  // Performance Optimization: Throttle path updates to reduce React re-renders
+  const lastUpdateRef = React.useRef(0);
   useAnimationFrame((t) => {
+    // Limit updates to ~20fps (every 50ms) to save CPU/battery
+    if (t - lastUpdateRef.current < 50) return;
+    lastUpdateRef.current = t;
+
     const lvlNow = clamp(mvLevel.get(), 0, 100);
     setShownPct(lvlNow);
 

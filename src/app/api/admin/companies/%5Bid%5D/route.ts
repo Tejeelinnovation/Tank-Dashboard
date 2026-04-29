@@ -11,13 +11,8 @@ export async function DELETE(
 ) {
   const { id } = await params;
   const ok = await isAdminLoggedIn();
-
-  if (!ok) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+  if (!ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   await deleteCompany(id);
-
   return NextResponse.json({ ok: true });
 }
 
@@ -27,42 +22,32 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const ok = await isAdminLoggedIn();
-
-  if (!ok) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
   const patch: any = {};
+  
+  if (body.name !== undefined) patch.name = String(body.name).trim();
+  if (body.companyLoginId !== undefined) patch.companyLoginId = String(body.companyLoginId).trim();
+  if (body.tanksCount !== undefined) patch.tanksCount = Math.max(1, Number(body.tanksCount) || 1);
+  if (body.logoUrl !== undefined) patch.logoUrl = String(body.logoUrl).trim() || null;
+  if (body.influxOrg !== undefined) patch.influxOrg = String(body.influxOrg).trim();
+  if (body.influxBucket !== undefined) patch.influxBucket = String(body.influxBucket).trim();
 
-  // Handle password update
   if (body.password !== undefined) {
     const pw = String(body.password).trim();
-    if (pw) {
+    if(pw) {
       patch.passwordHash = await bcrypt.hash(pw, 10);
       patch.pwd_reset_requested = false;
       patch.pwd_reset_approved = false;
     }
   }
 
-  // Handle reset approval
   if (body.pwd_reset_approved !== undefined) {
     patch.pwd_reset_approved = !!body.pwd_reset_approved;
   }
 
-  // Handle new fields
-  if (body.name !== undefined) patch.name = String(body.name).trim();
-  if (body.logoUrl !== undefined) patch.logoUrl = String(body.logoUrl).trim();
-  if (body.companyLoginId !== undefined) patch.companyLoginId = String(body.companyLoginId).trim();
-  if (body.influxOrg !== undefined) patch.influxOrg = String(body.influxOrg).trim();
-  if (body.influxBucket !== undefined) patch.influxBucket = String(body.influxBucket).trim();
-  if (body.tanksCount !== undefined) patch.tanksCount = Number(body.tanksCount);
-
   const updated = await updateCompany(id, patch);
-
-  if (!updated) {
-    return NextResponse.json({ error: "Company not found" }, { status: 404 });
-  }
-
+  if (!updated) return NextResponse.json({ error: "Company not found" }, { status: 404 });
   return NextResponse.json({ ok: true, company: updated });
 }

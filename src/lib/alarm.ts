@@ -16,7 +16,7 @@ function normalizeKey(value?: string) {
     .replace(/[^a-z0-9]+/g, "");
 }
 
-function normalizeLevelPercent(tank: Tank) {
+export function normalizeLevelPercent(tank: Tank) {
   const raw = Number(tank.level);
   if (!Number.isFinite(raw)) return 0;
 
@@ -30,7 +30,8 @@ function normalizeLevelPercent(tank: Tank) {
   return Math.max(0, Math.min(100, (raw / cap) * 100));
 }
 
-export function currentVolumeL(tank: Tank) {
+export function currentVolumeL(tank: Tank | null | undefined) {
+  if (!tank) return 0;
   const cap = tank.capacityLiters ?? 1000;
   const pct = normalizeLevelPercent(tank);
   return (pct / 100) * cap;
@@ -70,8 +71,10 @@ export function getTankAlarmReasons(tank: Tank, limits?: TankAlarmLimits) {
   if (!limits) return [] as string[];
 
   const reasons: string[] = [];
-  const vol = currentVolumeL(tank);
-  const temp = typeof tank.temperatureC === "number" ? tank.temperatureC : undefined;
+  
+  // Use the unit-specific values if available, otherwise fallback to Liters/Celsius
+  const vol = typeof tank.volumeValue === "number" ? tank.volumeValue : currentVolumeL(tank);
+  const temp = typeof tank.temperatureValue === "number" ? tank.temperatureValue : (tank.temperatureC);
 
   if (typeof limits.minVolumeL === "number" && vol < limits.minVolumeL) reasons.push("Low Volume");
   if (typeof limits.maxVolumeL === "number" && vol > limits.maxVolumeL) reasons.push("High Volume");

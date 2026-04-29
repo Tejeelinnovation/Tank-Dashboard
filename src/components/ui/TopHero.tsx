@@ -6,6 +6,8 @@ import ThemeToggle from "@/components/ui/ThemeToggle";
 
 type TopHeroProps = {
   brand?: string;
+  logoUrl?: string;
+  companyName?: string;
   navItems?: { label: string; href: string }[];
   ctaLabel?: string;
   onCtaClickHref?: string;
@@ -45,6 +47,8 @@ function HamburgerIcon({ open }: { open: boolean }) {
 
 export default function TopHero({
   brand = "Ekatva",
+  logoUrl,
+  companyName,
   navItems = [
     { label: "About", href: "#" },
     { label: "Setup", href: "#" },
@@ -90,11 +94,13 @@ export default function TopHero({
       <div className="relative mx-auto max-w-6xl px-6 pt-6 pb-14">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center">
           <div className="flex items-center justify-start">
-            <img
-              src="/logo.png"
-              alt="Ekatva Logo"
-              className="h-[40px] md:h-[48px] w-auto object-contain cursor-pointer"
-            />
+            <Link href="/">
+              <img
+                src="/logo.png"
+                alt="Brand Logo"
+                className="h-[40px] md:h-[48px] w-auto object-contain cursor-pointer"
+              />
+            </Link>
           </div>
 
           <div className="flex items-center justify-center">
@@ -112,8 +118,6 @@ export default function TopHero({
               </nav>
             )}
           </div>
-
-          
 
           <div className="flex items-center justify-end gap-3">
             <ThemeToggle />
@@ -147,7 +151,28 @@ export default function TopHero({
           </div>
         </div>
 
-        <div className="mt-16 md:mt-20 text-center">
+        <div className="mt-16 md:mt-20 text-center flex flex-col items-center">
+          {logoUrl ? (
+            <div className="mb-4">
+              <img
+                src={logoUrl}
+                alt={companyName || "Company Logo"}
+                className="h-24 w-auto object-contain mx-auto"
+              />
+              {companyName && (
+                <div className="mt-3 text-2xl font-bold text-black dark:text-white">
+                  {companyName}
+                </div>
+              )}
+            </div>
+          ) : (
+            companyName && (
+              <div className="mb-4 text-3xl font-bold text-black dark:text-white">
+                {companyName}
+              </div>
+            )
+          )}
+          
           <div className="text-[10px] md:text-xs uppercase tracking-[0.28em] text-black/55 dark:text-white/55">
             {eyebrow}
           </div>
@@ -215,7 +240,7 @@ export default function TopHero({
             <div className="flex items-center">
               <img
                 src="/logo.png"
-                alt="Ekatva Logo"
+                alt="Brand Logo"
                 className="h-8 w-auto object-contain"
               />
             </div>

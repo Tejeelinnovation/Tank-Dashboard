@@ -5,12 +5,19 @@ import FluidTank from "./FluidTankClient";
 import TankHistoryChart from "./TankHistoryChart";
 import type { Tank } from "./TankGrid";
 import type { TankAlarmLimits } from "@/types/alarm";
-import {
-  litersToVolumeUnit,
-  cToTemperatureUnit,
-  type VolumeUnit,
+import { 
+  type VolumeUnit, 
   type TemperatureUnit,
-} from "@/lib/companySetupClient";
+  convertFromLiters,
+  convertTemperature,
+  convertMaToLiters
+} from "@/lib/conversions";
+import { 
+  normalizeLevelPercent, 
+  currentVolumeL, 
+  getTankAlarmReasons,
+  pickAlarmLimits as pickLimits
+} from "@/lib/alarm";
 
 type TankMetric = "volume" | "temperature";
 
@@ -31,108 +38,6 @@ function parseDateInput(v: string) {
   const d = new Date(v);
   d.setHours(0, 0, 0, 0);
   return d;
-}
-
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function extractTankIndex(value?: string) {
-  if (!value) return undefined;
-  const m =
-    String(value).match(/(?:tank\s*[-_ ]*|^t)(\d+)$/i) ??
-    String(value).match(/(\d+)/);
-  if (!m) return undefined;
-  const n = Number(m[1]);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function normalizeKey(value?: string) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-}
-
-function pickLimits(
-  map: Record<string, TankAlarmLimits>,
-  tank: Pick<Tank, "id" | "name">
-) {
-  const directKeys = [tank.id, tank.name].filter(Boolean) as string[];
-
-  for (const key of directKeys) {
-    if (map[key]) return map[key];
-  }
-
-  const wantedNormalized = new Set(directKeys.map(normalizeKey).filter(Boolean));
-  const wantedIndex = extractTankIndex(tank.id) ?? extractTankIndex(tank.name);
-
-  for (const [key, limits] of Object.entries(map)) {
-    if (!limits) continue;
-
-    if (wantedNormalized.has(normalizeKey(key))) return limits;
-
-    const entryIndex = extractTankIndex(key);
-    if (
-      typeof wantedIndex === "number" &&
-      typeof entryIndex === "number" &&
-      wantedIndex === entryIndex
-    ) {
-      return limits;
-    }
-  }
-
-  return undefined;
-}
-
-function normalizeLevelPercent(tank: Tank | null) {
-  if (!tank) return 0;
-
-  const raw = Number(tank.level);
-  if (!Number.isFinite(raw)) return 0;
-
-  if (raw <= 100) {
-    return clamp(raw, 0, 100);
-  }
-
-  const cap =
-    typeof tank.capacityLiters === "number" && tank.capacityLiters > 0
-      ? tank.capacityLiters
-      : 1000;
-
-  return clamp((raw / cap) * 100, 0, 100);
-}
-
-function currentVolumeL(tank: Tank | null) {
-  if (!tank) return 0;
-
-  const cap =
-    typeof tank.capacityLiters === "number" && tank.capacityLiters > 0
-      ? tank.capacityLiters
-      : 1000;
-
-  const pct = normalizeLevelPercent(tank);
-  return Math.round((pct / 100) * cap);
-}
-
-function convertVolumeRawToLiters(
-  rawValue: number,
-  unit: VolumeUnit | undefined,
-  capacityLiters: number
-) {
-  if (!Number.isFinite(rawValue)) return 0;
-  if (unit === "%") return (rawValue / 100) * capacityLiters;
-  if (unit === "m³") return rawValue * 1000;
-  return rawValue;
-}
-
-function convertTemperatureRawToC(
-  rawValue: number,
-  unit: TemperatureUnit | undefined
-) {
-  if (!Number.isFinite(rawValue)) return 0;
-  if (unit === "°F") return ((rawValue - 32) * 5) / 9;
-  return rawValue;
 }
 
 function temperatureToVisualLevel(tempC?: number) {
@@ -222,85 +127,14 @@ export default function TankDetailsModal({
 
   const currentVolumeLiters = React.useMemo(() => currentVolumeL(tank), [tank]);
 
-  const volumeAlarmNow = React.useMemo(() => {
-    if (!tank || !limits) return false;
-
-    if (
-      typeof limits.minVolumeL === "number" &&
-      currentVolumeLiters < limits.minVolumeL
-    ) {
-      return true;
-    }
-
-    if (
-      typeof limits.maxVolumeL === "number" &&
-      currentVolumeLiters > limits.maxVolumeL
-    ) {
-      return true;
-    }
-
-    return false;
-  }, [tank, limits, currentVolumeLiters]);
-
-  const temperatureAlarmNow = React.useMemo(() => {
-    if (!tank || !limits || typeof tank.temperatureC !== "number") return false;
-
-    if (
-      typeof limits.minTempC === "number" &&
-      tank.temperatureC < limits.minTempC
-    ) {
-      return true;
-    }
-
-    if (
-      typeof limits.maxTempC === "number" &&
-      tank.temperatureC > limits.maxTempC
-    ) {
-      return true;
-    }
-
-    return false;
+  const alarmReasons = React.useMemo(() => {
+    if (!tank || !limits) return [];
+    return getTankAlarmReasons(tank, limits);
   }, [tank, limits]);
 
-  const alarmNow = volumeAlarmNow || temperatureAlarmNow;
-
-  const alarmReasons = React.useMemo(() => {
-    const reasons: string[] = [];
-
-    if (volumeAlarmNow) {
-      if (
-        typeof limits?.minVolumeL === "number" &&
-        currentVolumeLiters < limits.minVolumeL
-      ) {
-        reasons.push("Low Volume");
-      }
-      if (
-        typeof limits?.maxVolumeL === "number" &&
-        currentVolumeLiters > limits.maxVolumeL
-      ) {
-        reasons.push("High Volume");
-      }
-    }
-
-    if (temperatureAlarmNow) {
-      if (
-        typeof limits?.minTempC === "number" &&
-        typeof tank?.temperatureC === "number" &&
-        tank.temperatureC < limits.minTempC
-      ) {
-        reasons.push("Low Temp");
-      }
-      if (
-        typeof limits?.maxTempC === "number" &&
-        typeof tank?.temperatureC === "number" &&
-        tank.temperatureC > limits.maxTempC
-      ) {
-        reasons.push("High Temp");
-      }
-    }
-
-    return reasons;
-  }, [volumeAlarmNow, temperatureAlarmNow, limits, currentVolumeLiters, tank]);
+  const alarmNow = alarmReasons.length > 0;
+  const volumeAlarmNow = alarmReasons.some(r => r.includes("Volume"));
+  const temperatureAlarmNow = alarmReasons.some(r => r.includes("Temp"));
 
   const selectedDisplay = React.useMemo(() => {
     if (!tank) {
@@ -318,10 +152,10 @@ export default function TankDetailsModal({
         typeof tank.volumeValue === "number"
           ? tank.volumeValue
           : roundForUnit(
-              litersToVolumeUnit(
+              convertFromLiters(
                 currentVolumeLiters,
-                { capacityLiters: tank.capacityLiters ?? 1000 },
-                label
+                label,
+                tank.capacityLiters ?? 1000
               ),
               label
             );
@@ -338,7 +172,7 @@ export default function TankDetailsModal({
     const value =
       typeof tank.temperatureValue === "number"
         ? tank.temperatureValue
-        : roundForUnit(cToTemperatureUnit(tank.temperatureC ?? 0, label), label);
+        : roundForUnit(convertTemperature(tank.temperatureC ?? 0, "°C", label), label);
 
     return {
       label,
@@ -357,10 +191,10 @@ export default function TankDetailsModal({
         min:
           typeof limits.minVolumeL === "number"
             ? roundForUnit(
-                litersToVolumeUnit(
+                convertFromLiters(
                   limits.minVolumeL,
-                  { capacityLiters: tank.capacityLiters ?? 1000 },
-                  unit
+                  unit,
+                  tank.capacityLiters ?? 1000
                 ),
                 unit
               )
@@ -368,10 +202,10 @@ export default function TankDetailsModal({
         max:
           typeof limits.maxVolumeL === "number"
             ? roundForUnit(
-                litersToVolumeUnit(
+                convertFromLiters(
                   limits.maxVolumeL,
-                  { capacityLiters: tank.capacityLiters ?? 1000 },
-                  unit
+                  unit,
+                  tank.capacityLiters ?? 1000
                 ),
                 unit
               )
@@ -383,11 +217,11 @@ export default function TankDetailsModal({
     return {
       min:
         typeof limits.minTempC === "number"
-          ? roundForUnit(cToTemperatureUnit(limits.minTempC, unit), unit)
+          ? roundForUnit(convertTemperature(limits.minTempC, "°C", unit), unit)
           : undefined,
       max:
         typeof limits.maxTempC === "number"
-          ? roundForUnit(cToTemperatureUnit(limits.maxTempC, unit), unit)
+          ? roundForUnit(convertTemperature(limits.maxTempC, "°C", unit), unit)
           : undefined,
     };
   }, [tank, limits, metric]);
@@ -466,12 +300,12 @@ export default function TankDetailsModal({
 
           if (metric === "volume") {
             const unit = tank.volumeUnit ?? "L";
-            const liters = convertVolumeRawToLiters(raw, unit, capacity);
+            const liters = convertMaToLiters(raw, capacity);
             const displayValue =
               unit === "%"
                 ? roundForUnit(raw, unit)
                 : roundForUnit(
-                    litersToVolumeUnit(liters, { capacityLiters: capacity }, unit),
+                    convertFromLiters(liters, unit, capacity),
                     unit
                   );
 
@@ -486,10 +320,10 @@ export default function TankDetailsModal({
           }
 
           const unit = tank.temperatureUnit ?? "°C";
-          const tempC = convertTemperatureRawToC(raw, unit);
+          const tempC = convertTemperature(raw, unit, "°C");
           const displayValue =
             unit === "°F"
-              ? roundForUnit(cToTemperatureUnit(tempC, unit), unit)
+              ? roundForUnit(convertTemperature(tempC, "°C", unit), unit)
               : roundForUnit(tempC, unit);
 
           return {

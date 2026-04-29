@@ -78,17 +78,40 @@ export default function TankHistoryChart({
       ? "rgba(255,180,90,0.95)"
       : "rgba(120,245,255,0.95)";
 
-  // Fixed Y-axis domain for consistent layout
-  const yDomain =
-    metric === "temperature" ? [0, 100] : [0, 5000];
+  /**
+   * Priority based Y-axis domain:
+   * 1. Configured min/max for the relevant tank/sensor (if available)
+   * 2. Derived min/max from available data
+   * 3. Fallback: 0 to 20000
+   */
+  const yDomain = React.useMemo(() => {
+    if (hasMetricLimits) {
+      const lo = typeof minLine === "number" ? minLine : 0;
+      const hi = typeof maxLine === "number" ? maxLine : lo + 20000;
+      // Add slight padding
+      return [Math.max(0, lo * 0.9), hi * 1.1];
+    }
+    
+    if (data.length > 0) {
+      const vals = data.map(d => d.value).filter(v => typeof v === "number") as number[];
+      if (vals.length > 0) {
+        const minVal = Math.min(...vals);
+        const maxVal = Math.max(...vals);
+        return [minVal * 0.9, maxVal * 1.1];
+      }
+    }
+
+    // Default fallbacks
+    return metric === "temperature" ? [0, 100] : [0, 20000];
+  }, [data, metric, minLine, maxLine, hasMetricLimits]);
 
   return (
-    <div className="relative h-[220px] w-full rounded-2xl border border-white/10 bg-white/5 p-3 sm:h-[280px]">
+    <div className="relative h-[220px] w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-3 sm:h-[280px] transition-colors">
 
       {/* Overlay shown when no data exists */}
       {isEmpty && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/5 rounded-2xl backdrop-blur-[1px]">
-          <span className="text-white/30 text-sm font-medium">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/5 dark:bg-black/10 rounded-2xl backdrop-blur-[1px]">
+          <span className="text-black/30 dark:text-white/30 text-sm font-medium">
             No data available
           </span>
         </div>
@@ -105,24 +128,27 @@ export default function TankHistoryChart({
           {/* X Axis (dates) */}
           <XAxis
             dataKey="date"
-            tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }}
+            tick={{ fill: "currentColor", fontSize: 11, opacity: 0.55 }}
             minTickGap={18}
+            className="text-black dark:text-white"
           />
 
-          {/* Y Axis with fixed range */}
+          {/* Y Axis with dynamic domain */}
           <YAxis
-            tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }}
+            tick={{ fill: "currentColor", fontSize: 11, opacity: 0.55 }}
             width={42}
             domain={yDomain}
+            className="text-black dark:text-white"
           />
 
           {/* Tooltip */}
           <Tooltip
             contentStyle={{
-              background: "rgba(0,0,0,0.55)",
-              border: "1px solid rgba(255,255,255,0.10)",
+              background: "var(--card-bg)",
+              backdropFilter: "blur(8px)",
+              border: "1px solid var(--border)",
               borderRadius: 12,
-              color: "white",
+              color: "var(--foreground)",
             }}
             formatter={(value: any) => [
               `${value} ${unitLabel}`,

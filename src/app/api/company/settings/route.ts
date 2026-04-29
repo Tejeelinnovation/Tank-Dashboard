@@ -85,13 +85,32 @@ export async function GET(req: NextRequest) {
 
     const companyRes = await pool.query(
       `
-      select id, name, slug, tanks_count, tank_capacities, data_mode, pwd_reset_requested, pwd_reset_approved
+      select id, name, slug, logo_url, tanks_count, tank_capacities, data_mode, influx_org, influx_bucket, pwd_reset_requested, pwd_reset_approved
       from companies
       where id = $1
       limit 1
       `,
       [companyId]
     );
+
+    const rawCompany = companyRes.rows[0];
+    const company = rawCompany
+      ? {
+          id: rawCompany.id,
+          name: rawCompany.name,
+          slug: rawCompany.slug,
+          logoUrl: rawCompany.logo_url,
+          tanksCount: Number(rawCompany.tanks_count ?? 0),
+          tankCapacities: Array.isArray(rawCompany.tank_capacities)
+            ? rawCompany.tank_capacities.map(Number)
+            : [],
+          dataMode: rawCompany.data_mode,
+          influxOrg: rawCompany.influx_org,
+          influxBucket: rawCompany.influx_bucket,
+          pwdResetRequested: !!rawCompany.pwd_reset_requested,
+          pwdResetApproved: !!rawCompany.pwd_reset_approved,
+        }
+      : null;
 
     const settingsRes = await pool.query(
       `
@@ -102,6 +121,21 @@ export async function GET(req: NextRequest) {
       `,
       [companyId]
     );
+
+    const tanks = settingsRes.rows.map((row) => ({
+      id: row.id,
+      tankKey: row.tank_key,
+      tankName: row.tank_name,
+      volumeChannel: row.volume_channel,
+      temperatureChannel: row.temperature_channel,
+      capacityLiters: Number(row.capacity_liters),
+      volumeUnit: row.volume_unit,
+      temperatureUnit: row.temperature_unit,
+      volumeMin: row.volume_min != null ? Number(row.volume_min) : null,
+      volumeMax: row.volume_max != null ? Number(row.volume_max) : null,
+      temperatureMin: row.temperature_min != null ? Number(row.temperature_min) : null,
+      temperatureMax: row.temperature_max != null ? Number(row.temperature_max) : null,
+    }));
 
     const alarmsRes = await pool.query(
       `
@@ -134,8 +168,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      company: companyRes.rows[0] ?? null,
-      tanks: settingsRes.rows,
+      company,
+      tanks,
       alarms,
     });
   } catch (error) {

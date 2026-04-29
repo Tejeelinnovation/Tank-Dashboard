@@ -1,12 +1,20 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { queryInflux } from "@/lib/influx";
 
-const bucket = process.env.INFLUX_BUCKET!;
+const defaultBucket = process.env.INFLUX_BUCKET!;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const org = searchParams.get("org") || undefined;
+    const bucket = searchParams.get("bucket") || defaultBucket;
+
+    if (!bucket) {
+      return NextResponse.json({ error: "Influx Bucket is required" }, { status: 400 });
+    }
+
     const flux = `
 from(bucket: "${bucket}")
   |> range(start: -365d)
@@ -22,7 +30,7 @@ from(bucket: "${bucket}")
       _time: string;
       _value: number;
       channel: string;
-    }>(flux);
+    }>(flux, org);
 
     return NextResponse.json({ rows });
   } catch (error) {

@@ -63,7 +63,7 @@ export default function CompanyDashboardPage() {
 
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [setupTanks, setSetupTanks] = useState<TankSetupItem[]>([]);
-  const [companyBranding, setCompanyBranding] = useState<{ name: string; logoUrl: string; influxOrg?: string; influxBucket?: string }>({ name: "", logoUrl: "" });
+  const [companyBranding, setCompanyBranding] = useState<{ name: string; logoUrl: string }>({ name: "", logoUrl: "" });
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [alarms, setAlarms] = useState<AlarmEvent[]>([]);
@@ -89,9 +89,7 @@ export default function CompanyDashboardPage() {
 
       setCompanyBranding({
         name: company.name || "",
-        logoUrl: company.logoUrl || "",
-        influxOrg: company.influxOrg,
-        influxBucket: company.influxBucket,
+        logoUrl: company.logoUrl || ""
       });
 
       const normalizedSetup: TankSetupItem[] = Array.from({ length: tanksCount }, (_, i) => {
@@ -122,20 +120,8 @@ export default function CompanyDashboardPage() {
 
   const loadData = useCallback(async () => {
     if (!slug || setupTanks.length === 0) return;
-    
-    const { influxOrg, influxBucket } = companyBranding;
-    if (!influxOrg || !influxBucket) {
-      setErr("Data source not configured. Please contact administrator.");
-      setLoading(false);
-      return;
-    }
-
     try {
-      const url = new URL("/api/influx/latest", window.location.origin);
-      url.searchParams.set("org", influxOrg);
-      url.searchParams.set("bucket", influxBucket);
-
-      const influxRes = await fetch(url.toString(), { cache: "no-store" });
+      const influxRes = await fetch("/api/influx/latest", { cache: "no-store" });
       const influxJson = await influxRes.json().catch(() => ({}));
       if (!influxRes.ok) throw new Error("Influx failed");
 
@@ -209,8 +195,6 @@ export default function CompanyDashboardPage() {
     window.location.href = "/login";
   }
 
-  // Polling logic moved to useVisibilityPolling above.
-
   return (
     <main className="relative min-h-screen overflow-hidden text-black dark:text-white transition-colors duration-500">
       <BackgroundFX />
@@ -232,21 +216,16 @@ export default function CompanyDashboardPage() {
           ]}
         />
 
-        {/* Logout and Request Password buttons removed - moved to Setup or top nav */}
-
-
-
-
         <section id="tanks" className="mx-auto max-w-6xl px-6 pb-20 pt-10">
           {err ? (
-            <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
               {err}
             </div>
           ) : null}
 
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
             {/* Left side: Tanks */}
-            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2">
+            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2">
               <div className="mb-6 flex items-end justify-between gap-4">
                 <div className="min-w-0">
                   <h2 className="text-xl font-semibold text-black dark:text-white md:text-2xl truncate">
@@ -271,7 +250,7 @@ export default function CompanyDashboardPage() {
             </div>
 
             {/* Right side: Alarms */}
-            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1 sticky top-6">
+            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-1 sticky top-6">
               <div className="mb-6 flex items-end justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-semibold text-black dark:text-white md:text-xl">
@@ -291,15 +270,15 @@ export default function CompanyDashboardPage() {
                         key={i}
                         className="flex flex-col gap-1 border-b border-black/10 dark:border-white/10 pb-3 last:border-b-0 last:pb-0"
                       >
-                        <div className="text-black/90 dark:text-white/90">
+                        <div className="text-black dark:text-white font-medium">
                           <span className="font-semibold">{a.tankName}</span>{" "}
-                          <span className="text-red-200">— {a.reason}</span>
+                          <span className="text-red-600 dark:text-red-300">— {a.reason}</span>
                         </div>
-                        <div className="text-white/55">
+                        <div className="text-black/60 dark:text-white/55">
                           Value:{" "}
-                          {typeof a.volumeL === "number" ? `${a.volumeL}` : "--"} • Temp:{" "}
+                          {typeof a.volumeL === "number" ? `${a.volumeL.toFixed(0)} L` : "--"} • Temp:{" "}
                           {typeof a.temperatureC === "number"
-                            ? `${a.temperatureC}°C`
+                            ? `${a.temperatureC.toFixed(1)}°C`
                             : "--"}
                         </div>
                       </div>
@@ -307,7 +286,7 @@ export default function CompanyDashboardPage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 text-center text-sm text-black/55 dark:text-white/55">
+                <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-6 text-center text-sm text-black/55 dark:text-white/55">
                   No active alarms.
                 </div>
               )}

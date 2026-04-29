@@ -7,13 +7,14 @@ import BackgroundFX from "@/components/ui/BackgroundFX";
 import TopHero from "@/components/ui/TopHero";
 import PasswordInput from "@/components/ui/PasswordInput";
 import type { AlarmMap, TankAlarmLimits } from "@/types/alarm";
+import { 
+  type VolumeUnit, 
+  type TemperatureUnit, 
+} from "@/lib/conversions";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
-
-type VolumeUnit = "L" | "%" | "m³";
-type TemperatureUnit = "°C" | "°F";
 
 type TankSetupItem = {
   id: string;
@@ -26,7 +27,7 @@ type TankSetupItem = {
   ];
 };
 
-const VOLUME_UNITS: VolumeUnit[] = ["L", "%", "m³"];
+const VOLUME_UNITS: VolumeUnit[] = ["L", "%", "m³", "ml", "gal"];
 const TEMPERATURE_UNITS: TemperatureUnit[] = ["°C", "°F"];
 
 function makeDefaultTank(i: number): TankSetupItem {
@@ -54,9 +55,9 @@ function normalizeVolumeMetric(
   metric: any,
   fallbackChannel: string
 ): TankSetupItem["metrics"][0] {
-  const unit = VOLUME_UNITS.includes(metric?.unit) ? metric.unit : "L";
+  const unit = VOLUME_UNITS.includes(metric?.unit as VolumeUnit) ? (metric.unit as VolumeUnit) : "L";
   return {
-    channel: String(metric?.channel ?? fallbackChannel).trim(),
+    channel: String(metric?.channel || metric?.volumeChannel || fallbackChannel).trim(),
     type: "volume",
     unit,
   };
@@ -66,9 +67,9 @@ function normalizeTemperatureMetric(
   metric: any,
   fallbackChannel: string
 ): TankSetupItem["metrics"][1] {
-  const unit = TEMPERATURE_UNITS.includes(metric?.unit) ? metric.unit : "°C";
+  const unit = TEMPERATURE_UNITS.includes(metric?.unit as TemperatureUnit) ? (metric.unit as TemperatureUnit) : "°C";
   return {
-    channel: String(metric?.channel ?? fallbackChannel).trim(),
+    channel: String(metric?.channel || metric?.temperatureChannel || fallbackChannel).trim(),
     type: "temperature",
     unit,
   };
@@ -86,8 +87,8 @@ function normalizeTank(
     capacityLiters: clamp(Number(t?.capacityLiters ?? 1000) || 0, 1, 1_000_000),
     variant: "rect",
     metrics: [
-      normalizeVolumeMetric(metrics[0], `CH${i * 2 + 1}`),
-      normalizeTemperatureMetric(metrics[1], `CH${i * 2 + 2}`),
+      normalizeVolumeMetric(metrics[0] || t, `CH${i * 2 + 1}`),
+      normalizeTemperatureMetric(metrics[1] || t, `CH${i * 2 + 2}`),
     ],
   };
 }
@@ -186,8 +187,11 @@ export default function CompanySetupPage() {
     makeDefaultTank(3),
   ]);
 
+  const [companyBranding, setCompanyBranding] = useState<{ name: string; logoUrl: string; influxOrg?: string; influxBucket?: string }>({ name: "", logoUrl: "" });
   const [applyAllCap, setApplyAllCap] = useState<number>(1000);
   const [alarmMap, setAlarmMap] = useState<AlarmMap>({});
+  
+  const [availableChannels, setAvailableChannels] = useState<string[]>([]);
 
   const [applyAllMinVol, setApplyAllMinVol] = useState<string>("");
   const [applyAllMaxVol, setApplyAllMaxVol] = useState<string>("");
@@ -205,36 +209,57 @@ export default function CompanySetupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resettingPwd, setResettingPwd] = useState(false);
 
-    const loadFromServer = useCallback(async (silent = false) => {
-      try {
-        if (!silent) {
-          setInitialLoading(true);
-          setMsg(null);
+  const fetchChannels = useCallback(async (org?: string, bucket?: string) => {
+    if (!bucket) return;
+    try {
+      const res = await fetch(`/api/influx/channels?org=${org || ""}&bucket=${bucket}`);
+      const j = await res.json();
+      if (res.ok && Array.isArray(j.channels)) {
+        setAvailableChannels(j.channels);
+      }
+    } catch (e) { console.error("Failed to fetch channels", e); }
+  }, []);
+
+  const loadFromServer = useCallback(async (silent = false) => {
+    try {
+      if (!silent) {
+        setInitialLoading(true);
+        setMsg(null);
+      }
+
+      const res = await fetch(
+        `/api/company/settings?slug=${encodeURIComponent(slug)}&t=${Date.now()}`,
+        {
+          cache: "no-store",
         }
+      );
 
-        const res = await fetch(
-          `/api/company/settings?slug=${encodeURIComponent(slug)}&t=${Date.now()}`,
-          {
-            cache: "no-store",
-          }
-        );
+      const j = await res.json().catch(() => ({}));
 
-        const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j?.ok) {
+        throw new Error(j?.error || "Failed to load settings");
+      }
 
-        if (!res.ok || !j?.ok) {
-          throw new Error(j?.error || "Failed to load settings");
-        }
+      const company = j?.company || {};
+      const countFromCompany = clamp(
+        Number(company.tanksCount ?? 4),
+        1,
+        20
+      );
 
-        const countFromCompany = clamp(
-          Number(j?.company?.tanks_count ?? j?.company?.tanksCount ?? 4),
-          1,
-          20
-        );
+      setCompanyBranding({
+        name: company.name || "",
+        logoUrl: company.logoUrl || "",
+        influxOrg: company.influxOrg,
+        influxBucket: company.influxBucket,
+      });
 
-        const tankCapacities = Array.isArray(j?.company?.tank_capacities)
-          ? j.company.tank_capacities
-          : Array.isArray(j?.company?.tankCapacities)
-          ? j.company.tankCapacities
+      if (company.influxBucket) {
+        fetchChannels(company.influxOrg, company.influxBucket);
+      }
+
+      const tankCapacities = Array.isArray(company.tankCapacities)
+          ? company.tankCapacities
           : [];
 
         const serverTanks = Array.isArray(j?.tanks) ? j.tanks : [];
@@ -242,46 +267,7 @@ export default function CompanySetupPage() {
           const fromApi = serverTanks[i];
 
           if (fromApi) {
-            return normalizeTank(
-              {
-                id: fromApi.id ?? `tank-${i + 1}`,
-                name: fromApi.name ?? fromApi.tank_name ?? `Tank ${i + 1}`,
-                capacityLiters:
-                  Number(fromApi.capacityLiters ?? fromApi.capacity_liters) ||
-                  Number(tankCapacities[i]) ||
-                  1000,
-                variant: "rect",
-                metrics: [
-                  {
-                    channel:
-                      fromApi.metrics?.[0]?.channel ??
-                      fromApi.volumeChannel ??
-                      fromApi.volume_channel ??
-                      `CH${i * 2 + 1}`,
-                    type: "volume",
-                    unit:
-                      fromApi.metrics?.[0]?.unit ??
-                      fromApi.volumeUnit ??
-                      fromApi.volume_unit ??
-                      "L",
-                  },
-                  {
-                    channel:
-                      fromApi.metrics?.[1]?.channel ??
-                      fromApi.temperatureChannel ??
-                      fromApi.temperature_channel ??
-                      `CH${i * 2 + 2}`,
-                    type: "temperature",
-                    unit:
-                      fromApi.metrics?.[1]?.unit ??
-                      fromApi.temperatureUnit ??
-                      fromApi.temperature_unit ??
-                      "°C",
-                  },
-                ],
-              },
-              i
-            );
+            return normalizeTank(fromApi, i);
           }
 
           return normalizeTank(
@@ -303,8 +289,8 @@ export default function CompanySetupPage() {
         setTanks(nextTanks);
         setApplyAllCap(nextTanks?.[0]?.capacityLiters ?? 1000);
         setAlarmMap(nextAlarmMap);
-        setPwdResetRequested(!!j?.company?.pwd_reset_requested);
-        setPwdResetApproved(!!j?.company?.pwd_reset_approved);
+        setPwdResetRequested(!!company.pwdResetRequested);
+        setPwdResetApproved(!!company.pwdResetApproved);
       } catch (e: any) {
         setMsg({
           type: "err",
@@ -601,6 +587,8 @@ export default function CompanySetupPage() {
       <div className="relative">
         <TopHero
           brand="Ekatva"
+          logoUrl={companyBranding.logoUrl}
+          companyName={companyBranding.name}
           eyebrow="COMPANY SETUP"
           titleLine1="Configure"
           titleLine2="Your Tanks"
@@ -744,7 +732,7 @@ export default function CompanySetupPage() {
                             <div>
                                 <span className="text-[10px] opacity-60">Channel</span>
                                 <select value={tank.metrics[0].channel} onChange={(e) => updateVolumeMetricField(i, "channel", e.target.value)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
-                                    {Array.from({length:24}, (_, idx) => `CH${idx+1}`).map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                                    {(availableChannels.length > 0 ? availableChannels : Array.from({length:24}, (_, idx) => `CH${idx+1}`)).map(ch => <option key={ch} value={ch}>{ch}</option>)}
                                 </select>
                             </div>
                             <div>
@@ -760,7 +748,7 @@ export default function CompanySetupPage() {
                             <div>
                                 <span className="text-[10px] opacity-60">Channel</span>
                                 <select value={tank.metrics[1].channel} onChange={(e) => updateTemperatureMetricField(i, "channel", e.target.value)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
-                                    {Array.from({length:24}, (_, idx) => `CH${idx+1}`).map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                                    {(availableChannels.length > 0 ? availableChannels : Array.from({length:24}, (_, idx) => `CH${idx+1}`)).map(ch => <option key={ch} value={ch}>{ch}</option>)}
                                 </select>
                             </div>
                             <div>
@@ -776,19 +764,27 @@ export default function CompanySetupPage() {
                             <span className="opacity-60 block mb-2 font-medium">Alarm Limits (Thresholds)</span>
                             <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                                 <div className="space-y-1">
-                                    <span className="text-[10px] opacity-50">Min Volume</span>
+                                    <span className="text-[10px] opacity-50 flex justify-between">
+                                      Min Volume <span>({tank.metrics[0].unit})</span>
+                                    </span>
                                     <input value={typeof lim.minVolumeL === "number" ? String(lim.minVolumeL) : ""} onChange={(e) => updateTankLimit(i, { minVolumeL: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
                                 </div>
                                 <div className="space-y-1">
-                                    <span className="text-[10px] opacity-50">Max Volume</span>
+                                    <span className="text-[10px] opacity-50 flex justify-between">
+                                      Max Volume <span>({tank.metrics[0].unit})</span>
+                                    </span>
                                     <input value={typeof lim.maxVolumeL === "number" ? String(lim.maxVolumeL) : ""} onChange={(e) => updateTankLimit(i, { maxVolumeL: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
                                 </div>
                                 <div className="space-y-1">
-                                    <span className="text-[10px] opacity-50">Min Temp (°C)</span>
+                                    <span className="text-[10px] opacity-50 flex justify-between">
+                                      Min Temp <span>({tank.metrics[1].unit})</span>
+                                    </span>
                                     <input value={typeof lim.minTempC === "number" ? String(lim.minTempC) : ""} onChange={(e) => updateTankLimit(i, { minTempC: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
                                 </div>
                                 <div className="space-y-1">
-                                    <span className="text-[10px] opacity-50">Max Temp (°C)</span>
+                                    <span className="text-[10px] opacity-50 flex justify-between">
+                                      Max Temp <span>({tank.metrics[1].unit})</span>
+                                    </span>
                                     <input value={typeof lim.maxTempC === "number" ? String(lim.maxTempC) : ""} onChange={(e) => updateTankLimit(i, { maxTempC: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
                                 </div>
                             </div>
