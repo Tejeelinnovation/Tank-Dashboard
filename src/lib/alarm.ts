@@ -76,14 +76,18 @@ export function getTankAlarmReasons(tank: Tank, limits?: TankAlarmLimits) {
   const vol = typeof tank.volumeValue === "number" ? tank.volumeValue : currentVolumeL(tank);
   const temp = typeof tank.temperatureValue === "number" ? tank.temperatureValue : (tank.temperatureC);
 
-  if (typeof limits.minVolumeL === "number" && vol < limits.minVolumeL) reasons.push("Low Volume");
-  if (typeof limits.maxVolumeL === "number" && vol > limits.maxVolumeL) reasons.push("High Volume");
-
-  if (typeof limits.minTempC === "number" && typeof temp === "number" && temp < limits.minTempC) {
-    reasons.push("Low Temp");
+  if (!tank.disableVolume) {
+    if (typeof limits.minVolumeL === "number" && vol < limits.minVolumeL) reasons.push("Low Volume");
+    if (typeof limits.maxVolumeL === "number" && vol > limits.maxVolumeL) reasons.push("High Volume");
   }
-  if (typeof limits.maxTempC === "number" && typeof temp === "number" && temp > limits.maxTempC) {
-    reasons.push("High Temp");
+
+  if (!tank.disableTemperature) {
+    if (typeof limits.minTempC === "number" && typeof temp === "number" && temp < limits.minTempC) {
+      reasons.push("Low Temp");
+    }
+    if (typeof limits.maxTempC === "number" && typeof temp === "number" && temp > limits.maxTempC) {
+      reasons.push("High Temp");
+    }
   }
 
   return reasons;

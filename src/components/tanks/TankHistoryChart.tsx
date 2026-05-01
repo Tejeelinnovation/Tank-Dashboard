@@ -10,6 +10,7 @@ import {
   Tooltip,
   CartesianGrid,
   ReferenceLine,
+  Label,
 } from "recharts";
 
 type TankMetric = "volume" | "temperature";
@@ -20,21 +21,87 @@ type ChartPoint = {
   alarm: boolean;
 };
 
+/**
+ * Custom label component for the live-value reference line.
+ * Renders a pill-shaped badge with the current reading.
+ */
+function LiveValueLabel({
+  viewBox,
+  value,
+  unitLabel,
+  color,
+}: {
+  viewBox?: { x?: number; y?: number; width?: number };
+  value: number;
+  unitLabel: string;
+  color: string;
+}) {
+  if (!viewBox) return null;
+  const { y = 0, width = 0, x = 0 } = viewBox;
+  const text = `${value} ${unitLabel}`;
+  const pillW = Math.max(text.length * 7 + 20, 60);
+  const pillH = 22;
+  const px = x + width - pillW - 4;
+  const py = y - pillH / 2;
+
+  return (
+    <g>
+      {/* Badge background */}
+      <rect
+        x={px}
+        y={py}
+        width={pillW}
+        height={pillH}
+        rx={pillH / 2}
+        fill={color}
+        fillOpacity={0.18}
+        stroke={color}
+        strokeOpacity={0.45}
+        strokeWidth={1}
+      />
+      {/* Badge text */}
+      <text
+        x={px + pillW / 2}
+        y={py + pillH / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill={color}
+        fontSize={11}
+        fontWeight={600}
+      >
+        ⬤ {text}
+      </text>
+    </g>
+  );
+}
+
 export default function TankHistoryChart({
   data,
   metric,
   unitLabel,
   minLine,
   maxLine,
+  liveValue,
+  liveLabel,
+  color,
 }: {
   data: ChartPoint[];
   metric: TankMetric;
   unitLabel: string;
   minLine?: number;
   maxLine?: number;
+  /** Current live reading to display as a horizontal reference line */
+  liveValue?: number;
+  /** Override label text (defaults to unitLabel) */
+  liveLabel?: string;
+  /** Custom color for the graph line */
+  color?: string;
 }) {
   // Check if dataset is empty
   const isEmpty = !data || data.length === 0;
+
+  const defaultColor = metric === "temperature" ? "#f59e0b" : "#22d3ee";
+  const themeColor = color || defaultColor;
 
   // Check if alarm limit lines exist
   const hasMetricLimits =
@@ -47,18 +114,11 @@ export default function TankHistoryChart({
    */
   const normalizedData = React.useMemo(() => {
     if (!data || data.length === 0) return [];
-
-    const dates = data.map((d) => d.date);
-
-    return dates.map((date) => {
-      const found = data.find((d) => d.date === date);
-
-      return {
-        date,
-        value: found ? found.value : null, // null = no data point
-        alarm: found ? found.alarm : false,
-      };
-    });
+    return data.map(p => ({
+      date: p.date,
+      value: p.value,
+      alarm: p.alarm
+    }));
   }, [data]);
 
   /**
@@ -72,11 +132,8 @@ export default function TankHistoryChart({
     __alarmSeg: p.alarm && p.value != null ? p.value : null,
   }));
 
-  // Define line color based on metric
-  const lineColor =
-    metric === "temperature"
-      ? "rgba(255,180,90,0.95)"
-      : "rgba(120,245,255,0.95)";
+  const lineColor = themeColor;
+  const liveLineColor = themeColor;
 
   /**
    * Priority based Y-axis domain:
@@ -144,12 +201,15 @@ export default function TankHistoryChart({
           {/* Tooltip */}
           <Tooltip
             contentStyle={{
-              background: "var(--card-bg)",
-              backdropFilter: "blur(8px)",
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              color: "var(--foreground)",
+              background: "rgba(0,0,0,0.85)",
+              backdropFilter: "blur(12px)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 14,
+              fontSize: "12px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.4)"
             }}
+            itemStyle={{ color: themeColor }}
+            labelStyle={{ color: "rgba(255,255,255,0.5)", marginBottom: "4px", fontWeight: 500 }}
             formatter={(value: any) => [
               `${value} ${unitLabel}`,
               metric === "volume" ? "Volume" : "Temperature",
@@ -174,15 +234,44 @@ export default function TankHistoryChart({
             />
           )}
 
+          {/* Live value reference line */}
+          {typeof liveValue === "number" && Number.isFinite(liveValue) && (
+            <ReferenceLine
+              y={liveValue}
+              stroke={liveLineColor}
+              strokeDasharray="6 3"
+              strokeWidth={1.5}
+              ifOverflow="extendDomain"
+            />
+          )}
+
           {/* Normal data line (hidden if value is null) */}
           <Line
             type="monotone"
             dataKey="__normal"
             stroke={lineColor}
-            strokeWidth={2.8}
+            strokeWidth={3}
             dot={false}
+            activeDot={{ r: 5, strokeWidth: 0, fill: themeColor }}
             connectNulls={false} // ensures gaps appear
           />
+          
+          {/* Terminal Live Point Dot */}
+          {data.length > 0 && liveValue !== undefined && (
+             <Line
+              type="monotone"
+              data={[data[data.length - 1]]}
+              dataKey="value"
+              stroke="none"
+              dot={{
+                r: 4.5,
+                fill: themeColor,
+                stroke: "#fff",
+                strokeWidth: 2,
+                className: "drop-shadow-[0_0_8px_rgba(0,0,0,0.5)]"
+              }}
+            />
+          )}
 
           {/* Alarm segment line */}
           <Line

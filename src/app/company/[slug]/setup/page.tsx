@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
-import { useVisibilityPolling } from "@/lib/useVisibilityPolling";
 import BackgroundFX from "@/components/ui/BackgroundFX";
 import TopHero from "@/components/ui/TopHero";
 import PasswordInput from "@/components/ui/PasswordInput";
@@ -10,6 +9,7 @@ import type { AlarmMap, TankAlarmLimits } from "@/types/alarm";
 import { 
   type VolumeUnit, 
   type TemperatureUnit, 
+  type MetricMode,
 } from "@/lib/conversions";
 
 function clamp(n: number, min: number, max: number) {
@@ -21,11 +21,30 @@ type TankSetupItem = {
   name: string;
   capacityLiters: number;
   variant?: "rect";
+  fluidColor?: string;
+  tempColor?: string;
+  disableVolume?: boolean;
+  disableTemperature?: boolean;
+  volumeMode?: "default" | "percent" | "inverted";
+  temperatureMode?: "default" | "percent" | "inverted";
   metrics: [
     { channel: string; type: "volume"; unit: VolumeUnit },
     { channel: string; type: "temperature"; unit: TemperatureUnit }
   ];
 };
+
+const FLUID_COLOR_SWATCHES = [
+  "#22d3ee",
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#ec4899",
+  "#14b8a6",
+  "#64748b",
+  "#f97316",
+];
 
 const VOLUME_UNITS: VolumeUnit[] = ["L", "%", "m³", "ml", "gal"];
 const TEMPERATURE_UNITS: TemperatureUnit[] = ["°C", "°F"];
@@ -36,6 +55,7 @@ function makeDefaultTank(i: number): TankSetupItem {
     name: `Tank ${i + 1}`,
     capacityLiters: 1000,
     variant: "rect",
+    fluidColor: undefined,
     metrics: [
       {
         channel: `CH${i * 2 + 1}`,
@@ -86,6 +106,12 @@ function normalizeTank(
     name: t?.name?.trim() || `Tank ${i + 1}`,
     capacityLiters: clamp(Number(t?.capacityLiters ?? 1000) || 0, 1, 1_000_000),
     variant: "rect",
+    fluidColor: typeof t?.fluidColor === "string" && t.fluidColor ? t.fluidColor : undefined,
+    tempColor: typeof t?.tempColor === "string" && t.tempColor ? t.tempColor : undefined,
+    disableVolume: !!t?.disableVolume,
+    disableTemperature: !!t?.disableTemperature,
+    volumeMode: t?.volumeMode || "default",
+    temperatureMode: t?.temperatureMode || "default",
     metrics: [
       normalizeVolumeMetric(metrics[0] || t, `CH${i * 2 + 1}`),
       normalizeTemperatureMetric(metrics[1] || t, `CH${i * 2 + 2}`),
@@ -133,12 +159,35 @@ function getTankValidationError(tank: TankSetupItem): string | null {
   const [volumeMetric, temperatureMetric] = tank.metrics;
 
   if (!tank.name.trim()) return "Tank name is required.";
-  if (!volumeMetric.channel.trim()) return `${tank.name}: volume channel is required.`;
-  if (!temperatureMetric.channel.trim()) return `${tank.name}: temperature channel is required.`;
-  if (volumeMetric.channel === temperatureMetric.channel) {
+  if (!tank.disableVolume && !volumeMetric.channel.trim()) return `${tank.name}: volume channel is required.`;
+  if (!tank.disableTemperature && !temperatureMetric.channel.trim()) return `${tank.name}: temperature channel is required.`;
+  if (!tank.disableVolume && !tank.disableTemperature && volumeMetric.channel === temperatureMetric.channel) {
     return `${tank.name}: volume and temperature channels must be different.`;
   }
   if (!(tank.capacityLiters > 0)) return `${tank.name}: capacity must be greater than 0.`;
+
+  return null;
+}
+
+/**
+ * Strict validation for alarm thresholds against tank capacity.
+ */
+function validateTankThresholds(
+  limits: TankAlarmLimits,
+  capacityLiters: number,
+  tankName: string
+): string | null {
+  const { minVolumeL, maxVolumeL, minTempC, maxTempC } = limits;
+
+  if (typeof minVolumeL === "number" && minVolumeL < 0)
+    return `${tankName}: Minimum volume threshold cannot be below 0.`;
+  if (typeof maxVolumeL === "number" && maxVolumeL > capacityLiters)
+    return `${tankName}: Maximum volume threshold cannot exceed tank capacity (${capacityLiters}L).`;
+  if (typeof minVolumeL === "number" && typeof maxVolumeL === "number" && minVolumeL >= maxVolumeL)
+    return `${tankName}: Minimum volume threshold must be lower than maximum.`;
+
+  if (typeof minTempC === "number" && typeof maxTempC === "number" && minTempC >= maxTempC)
+    return `${tankName}: Minimum temperature must be lower than maximum.`;
 
   return null;
 }
@@ -301,11 +350,14 @@ export default function CompanySetupPage() {
       }
     }, [slug]);
 
-    useEffect(() => {
-      if (slug) loadFromServer();
-    }, [slug, loadFromServer]);
+    const hasLoadedRef = useRef(false);
 
-    useVisibilityPolling(() => loadFromServer(true), 8000);
+    useEffect(() => {
+      if (slug && !hasLoadedRef.current) {
+        hasLoadedRef.current = true;
+        loadFromServer();
+      }
+    }, [slug, loadFromServer]);
 
     useEffect(() => {
       if (msg) {
@@ -337,7 +389,7 @@ export default function CompanySetupPage() {
     });
   }
 
-  function updateTankField<K extends "name" | "capacityLiters">(
+  function updateTankField<K extends "name" | "capacityLiters" | "disableVolume" | "disableTemperature" | "volumeMode" | "temperatureMode">(
     i: number,
     key: K,
     value: TankSetupItem[K]
@@ -345,6 +397,22 @@ export default function CompanySetupPage() {
     setTanks((prev) => {
       const copy = [...prev];
       copy[i] = { ...copy[i], [key]: value };
+      return copy;
+    });
+  }
+
+  function updateFluidColor(i: number, color: string | undefined) {
+    setTanks((prev) => {
+      const copy = [...prev];
+      copy[i] = { ...copy[i], fluidColor: color };
+      return copy;
+    });
+  }
+
+  function updateTempColor(i: number, color: string | undefined) {
+    setTanks((prev) => {
+      const copy = [...prev];
+      copy[i] = { ...copy[i], tempColor: color };
       return copy;
     });
   }
@@ -468,6 +536,20 @@ export default function CompanySetupPage() {
 
     const canonicalAlarmMap = buildCanonicalAlarmMap(alarmMap, cleanTanks, cleanCount);
 
+    // Validate thresholds for each tank
+    for (let i = 0; i < cleanCount; i++) {
+      const key = tankKey(i);
+      const lim = canonicalAlarmMap[key];
+      if (lim) {
+        const thresholdErr = validateTankThresholds(lim, cleanTanks[i].capacityLiters, cleanTanks[i].name);
+        if (thresholdErr) {
+          setSaving(false);
+          setMsg({ type: "err", text: thresholdErr });
+          return;
+        }
+      }
+    }
+
     try {
       const res = await fetch("/api/company/settings", {
         method: "POST",
@@ -476,7 +558,7 @@ export default function CompanySetupPage() {
           slug,
           tanksCount: cleanCount,
           tankCapacities: cleanTanks.map((t) => t.capacityLiters),
-          tanks: cleanTanks,
+          tanks: cleanTanks.map(t => ({ ...t, fluidColor: t.fluidColor, tempColor: t.tempColor })),
           alarms: canonicalAlarmMap,
         }),
       });
@@ -706,6 +788,7 @@ export default function CompanySetupPage() {
                   const key = tankKey(i);
                   const tank = tanks[i] ?? makeDefaultTank(i);
                   const lim = cleanLimits((alarmMap[key] ?? {}) as TankAlarmLimits);
+                  const thresholdError = !isEmptyLimits(lim) ? validateTankThresholds(lim, tank.capacityLiters, tank.name) : null;
                   
                   return (
                     <div key={key} className="rounded-2xl border border-black/10 dark:border-white/10 p-5 bg-black/5 dark:bg-black/20 text-xs">
@@ -726,35 +809,166 @@ export default function CompanySetupPage() {
                           </div>
                         </div>
 
+                        {/* Accent Colors */}
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5">
-                            <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">Metric 1 (Vol)</span>
-                            <div>
+                          <div>
+                            <span className="opacity-60 block mb-2 font-medium">Vol Color</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => updateFluidColor(i, undefined)}
+                                className={[
+                                  "h-5 w-5 rounded-full border transition-all flex items-center justify-center text-[7px]",
+                                  !tank.fluidColor
+                                    ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
+                                    : "border-black/15 dark:border-white/15 hover:scale-105",
+                                ].join(" ")}
+                                style={{ background: "#22d3ee" }}
+                                title="Default Volume"
+                              >
+                                {!tank.fluidColor && <span className="text-white font-bold drop-shadow">✓</span>}
+                              </button>
+                              {FLUID_COLOR_SWATCHES.slice(1, 5).map((color) => (
+                                <button
+                                  key={color}
+                                  type="button"
+                                  onClick={() => updateFluidColor(i, color)}
+                                  className={[
+                                    "h-5 w-5 rounded-full border transition-all flex items-center justify-center",
+                                    tank.fluidColor === color
+                                      ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
+                                      : "border-black/10 dark:border-white/10 hover:scale-105",
+                                  ].join(" ")}
+                                  style={{ backgroundColor: color }}
+                                  title={color}
+                                >
+                                  {tank.fluidColor === color && <span className="text-white text-[7px] font-bold drop-shadow">✓</span>}
+                                </button>
+                              ))}
+                              <label className="relative h-5 w-5 rounded-full border border-dashed border-black/20 dark:border-white/20 cursor-pointer hover:scale-105 transition-all flex items-center justify-center overflow-hidden">
+                                <input
+                                  type="color"
+                                  value={tank.fluidColor && !FLUID_COLOR_SWATCHES.includes(tank.fluidColor) ? tank.fluidColor : "#22d3ee"}
+                                  onChange={(e) => updateFluidColor(i, e.target.value)}
+                                  className="absolute inset-0 opacity-0 cursor-pointer"
+                                />
+                                {tank.fluidColor && !FLUID_COLOR_SWATCHES.includes(tank.fluidColor) ? (
+                                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: tank.fluidColor }} />
+                                ) : (
+                                  <span className="text-[8px] opacity-40">+</span>
+                                )}
+                              </label>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="opacity-60 block mb-2 font-medium">Temp Color</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => updateTempColor(i, undefined)}
+                                className={[
+                                  "h-5 w-5 rounded-full border transition-all flex items-center justify-center text-[7px]",
+                                  !tank.tempColor
+                                    ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
+                                    : "border-black/15 dark:border-white/15 hover:scale-105",
+                                ].join(" ")}
+                                style={{ background: "#f59e0b" }}
+                                title="Default Temp"
+                              >
+                                {!tank.tempColor && <span className="text-white font-bold drop-shadow">✓</span>}
+                              </button>
+                              {FLUID_COLOR_SWATCHES.slice(1, 5).map((color) => (
+                                <button
+                                  key={color}
+                                  type="button"
+                                  onClick={() => updateTempColor(i, color)}
+                                  className={[
+                                    "h-5 w-5 rounded-full border transition-all flex items-center justify-center",
+                                    tank.tempColor === color
+                                      ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
+                                      : "border-black/10 dark:border-white/10 hover:scale-105",
+                                  ].join(" ")}
+                                  style={{ backgroundColor: color }}
+                                  title={color}
+                                >
+                                  {tank.tempColor === color && <span className="text-white text-[7px] font-bold drop-shadow">✓</span>}
+                                </button>
+                              ))}
+                              <label className="relative h-5 w-5 rounded-full border border-dashed border-black/20 dark:border-white/20 cursor-pointer hover:scale-105 transition-all flex items-center justify-center overflow-hidden">
+                                <input
+                                  type="color"
+                                  value={tank.tempColor && !FLUID_COLOR_SWATCHES.includes(tank.tempColor) ? tank.tempColor : "#f59e0b"}
+                                  onChange={(e) => updateTempColor(i, e.target.value)}
+                                  className="absolute inset-0 opacity-0 cursor-pointer"
+                                />
+                                {tank.tempColor && !FLUID_COLOR_SWATCHES.includes(tank.tempColor) ? (
+                                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: tank.tempColor }} />
+                                ) : (
+                                  <span className="text-[8px] opacity-40">+</span>
+                                )}
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className={`p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5 ${tank.disableVolume ? 'opacity-50 grayscale' : ''}`}>
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">Metric 1 (Vol)</span>
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" checked={!!tank.disableVolume} onChange={(e) => updateTankField(i, "disableVolume", e.target.checked)} className="cursor-pointer" />
+                                <span className="text-[10px] opacity-70">Disable</span>
+                              </label>
+                            </div>
+                            <div className={tank.disableVolume ? 'pointer-events-none' : ''}>
                                 <span className="text-[10px] opacity-60">Channel</span>
                                 <select value={tank.metrics[0].channel} onChange={(e) => updateVolumeMetricField(i, "channel", e.target.value)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
                                     {(availableChannels.length > 0 ? availableChannels : Array.from({length:24}, (_, idx) => `CH${idx+1}`)).map(ch => <option key={ch} value={ch}>{ch}</option>)}
                                 </select>
                             </div>
-                            <div>
+                            <div className={tank.disableVolume ? 'pointer-events-none' : ''}>
                                 <span className="text-[10px] opacity-60">Unit</span>
                                 <select value={tank.metrics[0].unit} onChange={(e) => updateVolumeMetricField(i, "unit", e.target.value as VolumeUnit)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
                                     {VOLUME_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                                 </select>
                             </div>
+                            <div className={tank.disableVolume ? 'pointer-events-none' : ''}>
+                                <span className="text-[10px] opacity-60">Input Mode</span>
+                                <select value={tank.volumeMode} onChange={(e) => updateTankField(i, "volumeMode", e.target.value as MetricMode)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
+                                    <option value="default">Default (mA)</option>
+                                    <option value="percent">Percentage (0-100)</option>
+                                    <option value="inverted">Inverted (100-0)</option>
+                                </select>
+                            </div>
                           </div>
 
-                          <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5">
-                            <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">Metric 2 (Temp)</span>
-                            <div>
+                          <div className={`p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5 ${tank.disableTemperature ? 'opacity-50 grayscale' : ''}`}>
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">Metric 2 (Temp)</span>
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" checked={!!tank.disableTemperature} onChange={(e) => updateTankField(i, "disableTemperature", e.target.checked)} className="cursor-pointer" />
+                                <span className="text-[10px] opacity-70">Disable</span>
+                              </label>
+                            </div>
+                            <div className={tank.disableTemperature ? 'pointer-events-none' : ''}>
                                 <span className="text-[10px] opacity-60">Channel</span>
                                 <select value={tank.metrics[1].channel} onChange={(e) => updateTemperatureMetricField(i, "channel", e.target.value)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
                                     {(availableChannels.length > 0 ? availableChannels : Array.from({length:24}, (_, idx) => `CH${idx+1}`)).map(ch => <option key={ch} value={ch}>{ch}</option>)}
                                 </select>
                             </div>
-                            <div>
+                            <div className={tank.disableTemperature ? 'pointer-events-none' : ''}>
                                 <span className="text-[10px] opacity-60">Unit</span>
                                 <select value={tank.metrics[1].unit} onChange={(e) => updateTemperatureMetricField(i, "unit", e.target.value as TemperatureUnit)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
                                     {TEMPERATURE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                </select>
+                            </div>
+                            <div className={tank.disableTemperature ? 'pointer-events-none' : ''}>
+                                <span className="text-[10px] opacity-60">Input Mode</span>
+                                <select value={tank.temperatureMode} onChange={(e) => updateTankField(i, "temperatureMode", e.target.value as MetricMode)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
+                                    <option value="default">Default (mA)</option>
+                                    <option value="percent">Percentage (0-100)</option>
+                                    <option value="inverted">Inverted (100-0)</option>
                                 </select>
                             </div>
                           </div>
@@ -788,6 +1002,12 @@ export default function CompanySetupPage() {
                                     <input value={typeof lim.maxTempC === "number" ? String(lim.maxTempC) : ""} onChange={(e) => updateTankLimit(i, { maxTempC: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
                                 </div>
                             </div>
+                            {/* Inline threshold validation error */}
+                            {thresholdError && (
+                              <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-[10px] text-red-600 dark:text-red-300 font-medium">
+                                {thresholdError}
+                              </div>
+                            )}
                         </div>
                       </div>
                     </div>

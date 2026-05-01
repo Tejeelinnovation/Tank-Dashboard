@@ -21,6 +21,10 @@ type TankCardProps = {
   alarmActive?: boolean;
   alarmLabel?: string;
   hasData?: boolean;
+  fluidColor?: string;
+  tempColor?: string;
+  disableVolume?: boolean;
+  disableTemperature?: boolean;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -42,6 +46,10 @@ export default function TankCard({
   alarmActive,
   alarmLabel,
   hasData = true,
+  fluidColor,
+  tempColor,
+  disableVolume,
+  disableTemperature,
 }: TankCardProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -87,15 +95,16 @@ export default function TankCard({
 
     if (!limits) return reasons;
 
-    if (typeof limits.minVolumeL === "number" && nowVol < limits.minVolumeL) {
+    if (!disableVolume && typeof limits.minVolumeL === "number" && nowVol < limits.minVolumeL) {
       reasons.push("Low Volume");
     }
 
-    if (typeof limits.maxVolumeL === "number" && nowVol > limits.maxVolumeL) {
+    if (!disableVolume && typeof limits.maxVolumeL === "number" && nowVol > limits.maxVolumeL) {
       reasons.push("High Volume");
     }
 
     if (
+      !disableTemperature &&
       typeof limits.minTempC === "number" &&
       typeof temperatureC === "number" &&
       temperatureC < limits.minTempC
@@ -104,6 +113,7 @@ export default function TankCard({
     }
 
     if (
+      !disableTemperature &&
       typeof limits.maxTempC === "number" &&
       typeof temperatureC === "number" &&
       temperatureC > limits.maxTempC
@@ -139,10 +149,12 @@ export default function TankCard({
         <div className="min-w-0">
           <h2 className="font-semibold text-black dark:text-white truncate" title={name}>{name}</h2>
 
-          <p className="mt-0.5 text-xs text-black/60 dark:text-white/60" suppressHydrationWarning>
-            Temp: {tempText}
-            {temperatureUnit}
-          </p>
+          {!disableTemperature && (
+            <p className="mt-0.5 text-xs text-black/60 dark:text-white/60" suppressHydrationWarning>
+              Temp: {tempText}
+              {temperatureUnit}
+            </p>
+          )}
 
           <p
             className={
@@ -180,16 +192,23 @@ export default function TankCard({
       </div>
 
       <div className="flex justify-center">
-        <FluidTank
-          level={levelPercent}
-          capacityLiters={capacityLiters ?? 1000}
-          variant={variant}
-          alarm={resolvedAlarmActive}
-          surface="flat"
-          displayValue={displayVolume}
-          displayUnit={volumeUnit}
-          accent="volume"
-        />
+        {disableVolume && disableTemperature ? (
+          <div className="h-[200px] w-full flex items-center justify-center text-sm font-medium opacity-50">
+            Disabled
+          </div>
+        ) : (
+          <FluidTank
+            level={disableVolume ? 50 : levelPercent} // Fallback to 50% fill for temperature-only view
+            capacityLiters={capacityLiters ?? 1000}
+            variant={variant}
+            alarm={resolvedAlarmActive}
+            surface="flat"
+            displayValue={disableVolume ? (typeof temperatureValue === "number" ? temperatureValue : 0) : displayVolume}
+            displayUnit={disableVolume ? temperatureUnit : volumeUnit}
+            accent={disableVolume ? "temperature" : "volume"}
+            fluidColor={disableVolume ? tempColor : fluidColor}
+          />
+        )}
       </div>
     </button>
   );

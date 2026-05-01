@@ -131,10 +131,16 @@ export async function GET(req: NextRequest) {
       capacityLiters: Number(row.capacity_liters),
       volumeUnit: row.volume_unit,
       temperatureUnit: row.temperature_unit,
+      fluidColor: row.fluid_color ?? null,
+      tempColor: row.temp_color ?? null,
+      disableVolume: !!row.disable_volume,
+      disableTemperature: !!row.disable_temperature,
       volumeMin: row.volume_min != null ? Number(row.volume_min) : null,
       volumeMax: row.volume_max != null ? Number(row.volume_max) : null,
       temperatureMin: row.temperature_min != null ? Number(row.temperature_min) : null,
       temperatureMax: row.temperature_max != null ? Number(row.temperature_max) : null,
+      volumeMode: row.volume_mode || "default",
+      temperatureMode: row.temperature_mode || "default",
     }));
 
     const alarmsRes = await pool.query(
@@ -271,6 +277,17 @@ export async function POST(req: NextRequest) {
         1_000_000
       );
 
+      const fluidColor = typeof tank?.fluidColor === "string" && tank.fluidColor
+        ? tank.fluidColor.trim().slice(0, 9)
+        : null;
+
+      const tempColor = typeof tank?.tempColor === "string" && tank.tempColor
+        ? tank.tempColor.trim().slice(0, 9)
+        : null;
+
+      const disableVolume = !!tank?.disableVolume;
+      const disableTemperature = !!tank?.disableTemperature;
+
       await client.query(
         `
         insert into company_tank_settings (
@@ -282,13 +299,19 @@ export async function POST(req: NextRequest) {
           capacity_liters,
           volume_unit,
           temperature_unit,
+          fluid_color,
+          temp_color,
           volume_min,
           volume_max,
           temperature_min,
           temperature_max,
+          disable_volume,
+          disable_temperature,
+          volume_mode,
+          temperature_mode,
           updated_at
         )
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now())
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,now())
         `,
         [
           companyId,
@@ -299,10 +322,16 @@ export async function POST(req: NextRequest) {
           capacityLiters,
           volumeUnit,
           temperatureUnit,
+          fluidColor,
+          tempColor,
           numOrNull(tank?.volumeMin, 0),
           numOrNull(tank?.volumeMax, 4000),
           numOrNull(tank?.temperatureMin, 0),
           numOrNull(tank?.temperatureMax, 100),
+          disableVolume,
+          disableTemperature,
+          tank?.volumeMode || "default",
+          tank?.temperatureMode || "default"
         ]
       );
     }

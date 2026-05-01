@@ -20,7 +20,47 @@ type FluidTankProps = {
   displayValue?: number;
   displayUnit?: string;
   accent?: Accent;
+  fluidColor?: string;
 };
+
+/**
+ * Parse a hex color (e.g. "#22d3ee") into [r, g, b] values.
+ */
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace(/^#/, "");
+  const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/**
+ * Create an rgba string from hex + alpha.
+ */
+function hexToRgba(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/**
+ * Lighten an rgb color by mixing with white.
+ */
+function lighten(rgb: [number, number, number], amount: number): [number, number, number] {
+  return [
+    Math.round(rgb[0] + (255 - rgb[0]) * amount),
+    Math.round(rgb[1] + (255 - rgb[1]) * amount),
+    Math.round(rgb[2] + (255 - rgb[2]) * amount),
+  ];
+}
+
+/**
+ * Darken an rgb color by mixing with black.
+ */
+function darken(rgb: [number, number, number], amount: number): [number, number, number] {
+  return [
+    Math.round(rgb[0] * (1 - amount)),
+    Math.round(rgb[1] * (1 - amount)),
+    Math.round(rgb[2] * (1 - amount)),
+  ];
+}
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -50,6 +90,7 @@ export default function FluidTank({
   displayValue,
   displayUnit,
   accent = "volume",
+  fluidColor,
 }: FluidTankProps) {
   const pad = 12;
   const innerW = width - pad * 2;
@@ -152,23 +193,40 @@ export default function FluidTank({
     setFrontD(buildWavePath(topY, phase, waveAmp));
   });
 
-  const liquidGradToUse = alarm
-    ? alarmGradId
+  // Compute custom fluid color gradients if provided
+  const hasCustomColor = typeof fluidColor === "string" && /^#[0-9a-fA-F]{3,8}$/.test(fluidColor);
+  const customRgb = hasCustomColor ? hexToRgb(fluidColor) : null;
+
+  const fillStyleToUse = alarm
+    ? `url(#${alarmGradId})`
     : accent === "temperature"
-    ? tempGradId
-    : liquidGradId;
+    ? `url(#${tempGradId})`
+    : `url(#${liquidGradId})`;
 
   const outerStroke = alarm
     ? "rgba(255,90,90,0.90)"
+    : hasCustomColor
+    ? hexToRgba(fluidColor!, 0.34)
     : accent === "temperature"
     ? "rgba(255,165,90,0.42)"
     : "rgba(135,225,255,0.34)";
 
   const innerStroke = alarm
     ? "rgba(255,70,70,0.85)"
+    : hasCustomColor
+    ? hexToRgba(fluidColor!, 0.30)
     : accent === "temperature"
     ? "rgba(255,160,90,0.36)"
     : "rgba(120,220,255,0.30)";
+
+  // Badge accent for the pill overlay
+  const badgeClass = alarm
+    ? "border-red-300/60 bg-red-500/28 shadow-[0_0_18px_rgba(255,70,70,0.28)]"
+    : hasCustomColor
+    ? "border-white/25 bg-black/18"
+    : accent === "temperature"
+    ? "border-orange-300/35 bg-orange-400/18"
+    : "border-cyan-300/30 bg-cyan-300/18";
 
   return (
     <div className="relative select-none">
@@ -202,15 +260,35 @@ export default function FluidTank({
           </linearGradient>
 
           <linearGradient id={liquidGradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(130,250,255,0.98)" />
-            <stop offset="40%" stopColor="rgba(0,224,255,0.90)" />
-            <stop offset="100%" stopColor="rgba(0,105,255,0.84)" />
+            {hasCustomColor && customRgb ? (
+              <>
+                <stop offset="0%" stopColor={`rgba(${lighten(customRgb, 0.35).join(",")},0.98)`} />
+                <stop offset="40%" stopColor={`rgba(${customRgb.join(",")},0.92)`} />
+                <stop offset="100%" stopColor={`rgba(${darken(customRgb, 0.35).join(",")},0.86)`} />
+              </>
+            ) : (
+              <>
+                <stop offset="0%" stopColor="rgba(130,250,255,0.98)" />
+                <stop offset="40%" stopColor="rgba(0,224,255,0.90)" />
+                <stop offset="100%" stopColor="rgba(0,105,255,0.84)" />
+              </>
+            )}
           </linearGradient>
 
           <linearGradient id={tempGradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(255,210,90,0.98)" />
-            <stop offset="45%" stopColor="rgba(255, 203, 100, 0.92)" />
-            <stop offset="100%" stopColor="rgba(255, 160, 65, 0.84)" />
+            {hasCustomColor && customRgb && accent === "temperature" ? (
+              <>
+                <stop offset="0%" stopColor={`rgba(${lighten(customRgb, 0.35).join(",")},0.98)`} />
+                <stop offset="45%" stopColor={`rgba(${customRgb.join(",")},0.92)`} />
+                <stop offset="100%" stopColor={`rgba(${darken(customRgb, 0.35).join(",")},0.86)`} />
+              </>
+            ) : (
+              <>
+                <stop offset="0%" stopColor="rgba(255,210,90,0.98)" />
+                <stop offset="45%" stopColor="rgba(255, 203, 100, 0.92)" />
+                <stop offset="100%" stopColor="rgba(255, 160, 65, 0.84)" />
+              </>
+            )}
           </linearGradient>
 
           <linearGradient id={alarmGradId} x1="0" y1="0" x2="0" y2="1">
@@ -269,7 +347,7 @@ export default function FluidTank({
           {surface === "wave" ? (
             <motion.path
               d={backD}
-              fill={`url(#${liquidGradToUse})`}
+              fill={fillStyleToUse}
               opacity={alarm ? 0.76 : 0.62}
               filter={`url(#${glowId})`}
             />
@@ -277,7 +355,7 @@ export default function FluidTank({
 
           <motion.path
             d={frontD}
-            fill={`url(#${liquidGradToUse})`}
+            fill={fillStyleToUse}
             opacity={alarm ? 1 : 0.98}
           />
 
@@ -314,11 +392,7 @@ export default function FluidTank({
         <div
           className={[
             "rounded-full border px-3 py-1 text-xs font-semibold text-white backdrop-blur",
-            alarm
-              ? "border-red-300/60 bg-red-500/28 shadow-[0_0_18px_rgba(255,70,70,0.28)]"
-              : accent === "temperature"
-              ? "border-orange-300/35 bg-orange-400/18"
-              : "border-cyan-300/30 bg-cyan-300/18",
+            badgeClass,
           ].join(" ")}
         >
           {formatDisplayValue(shownValue, shownUnit)}

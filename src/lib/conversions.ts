@@ -16,15 +16,31 @@ export type VolumeUnit =
   | "%";
 
 export type TemperatureUnit = "°C" | "°F" | "C" | "F";
+export type MetricMode = "default" | "percent" | "inverted";
 
 /**
- * Converts mA reading to Liters based on tank capacity.
- * liters = ((mA - 4000) * capacityLiters) / 16000
- * Values below 4000mA are treated as 0.
+ * Converts mA or raw reading to Liters based on tank capacity and mode.
+ * default: liters = ((mA - 4000) * capacityLiters) / 16000
+ * percent: liters = (raw / 100) * capacityLiters
+ * inverted: liters = ((100 - raw) / 100) * capacityLiters
  */
-export function convertMaToLiters(mA: number, capacityLiters: number): number {
-  if (mA < 4000) return 0;
-  return ((mA - 4000) * capacityLiters) / 16000;
+export function convertMaToLiters(
+  value: number, 
+  capacityLiters: number, 
+  mode: MetricMode = "default"
+): number {
+  if (mode === "percent") {
+    return (value / 100) * capacityLiters;
+  }
+  if (mode === "inverted") {
+    return ((100 - value) / 100) * capacityLiters;
+  }
+
+  // Default mA logic
+  // Handle both uA (4000-20000) and mA (4.0-20.0) scales
+  const normalizedMA = value < 100 ? value * 1000 : value;
+  if (normalizedMA < 4000) return 0;
+  return ((normalizedMA - 4000) * capacityLiters) / 16000;
 }
 
 /**

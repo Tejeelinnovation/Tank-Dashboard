@@ -10,7 +10,8 @@ import {
   type TemperatureUnit,
   convertFromLiters,
   convertTemperature,
-  convertMaToLiters
+  convertMaToLiters,
+  convertToLiters
 } from "@/lib/conversions";
 import { 
   normalizeLevelPercent, 
@@ -115,7 +116,7 @@ export default function TankDetailsModal({
 
   React.useEffect(() => {
     if (!open) return;
-    setMetric("volume");
+    setMetric(tank?.disableVolume && !tank?.disableTemperature ? "temperature" : "volume");
     setStartStr(toDateInputValue(defaultStart));
     setEndStr(toDateInputValue(today));
   }, [open, tankId, defaultStart, today]);
@@ -291,23 +292,23 @@ export default function TankDetailsModal({
         const capacity = tank.capacityLiters ?? 1000;
 
         const mapped: ChartPoint[] = rows.map((r: any) => {
-          const date = String(r?._time ?? "").slice(0, 10);
-          const raw = Number(r?._value);
+          const date = resolution === "time"
+            ? new Date(r._time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : String(r?._time ?? "").slice(0, 10);
+          
+          const raw = r?._value !== null ? Number(r._value) : null;
 
-          if (!Number.isFinite(raw)) {
-            return { date, value: 0, alarm: false };
+          if (raw === null || !Number.isFinite(raw)) {
+            return { date, value: null, alarm: false };
           }
 
           if (metric === "volume") {
             const unit = tank.volumeUnit ?? "L";
-            const liters = convertMaToLiters(raw, capacity);
-            const displayValue =
-              unit === "%"
-                ? roundForUnit(raw, unit)
-                : roundForUnit(
-                    convertFromLiters(liters, unit, capacity),
-                    unit
-                  );
+            const liters = convertMaToLiters(raw, capacity, tank.volumeMode);
+            const displayValue = roundForUnit(
+              convertFromLiters(liters, unit, capacity),
+              unit
+            );
 
             return {
               date,
@@ -320,7 +321,15 @@ export default function TankDetailsModal({
           }
 
           const unit = tank.temperatureUnit ?? "°C";
-          const tempC = convertTemperature(raw, unit, "°C");
+          let tempC = 0;
+          if (tank.temperatureMode === "percent") {
+            tempC = raw;
+          } else if (tank.temperatureMode === "inverted") {
+            tempC = 100 - raw;
+          } else {
+            tempC = convertTemperature(raw, unit, "°C");
+          }
+
           const displayValue =
             unit === "°F"
               ? roundForUnit(convertTemperature(tempC, "°C", unit), unit)
@@ -374,9 +383,80 @@ export default function TankDetailsModal({
     limits?.maxTempC,
   ]);
 
+  /**
+   * Inject the live tank value into the chart dataset.
+   * Replaces the last data point's value with the current live reading,
+   * or appends a single point if history is empty.
+   * This ensures the plotted line ends at the real system state.
+   */
+  const chartDataWithLive = React.useMemo(() => {
+    if (!tank) return history;
+
+    // Compute the live display value for the current metric
+    let liveDisplayValue: number;
+    let isLiveAlarm = false;
+
+    if (metric === "volume") {
+      const unit = tank.volumeUnit ?? "L";
+      const cap = tank.capacityLiters ?? 1000;
+      liveDisplayValue =
+        typeof tank.volumeValue === "number"
+          ? tank.volumeValue
+          : roundForUnit(convertFromLiters(currentVolumeLiters, unit, cap), unit);
+
+      // Recalculate alarm status for this live point
+      isLiveAlarm =
+        !!limits &&
+        ((typeof limits.minVolumeL === "number" && currentVolumeLiters < limits.minVolumeL) ||
+          (typeof limits.maxVolumeL === "number" && currentVolumeLiters > limits.maxVolumeL));
+    } else {
+      const unit = tank.temperatureUnit ?? "°C";
+      const tempC = tank.temperatureC ?? 0;
+      liveDisplayValue =
+        typeof tank.temperatureValue === "number"
+          ? tank.temperatureValue
+          : roundForUnit(convertTemperature(tempC, "°C", unit), unit);
+
+      isLiveAlarm =
+        !!limits &&
+        ((typeof limits.minTempC === "number" && tempC < limits.minTempC) ||
+          (typeof limits.maxTempC === "number" && tempC > limits.maxTempC));
+    }
+
+    // Format today as YYYY-MM-DD (local time) to match historical data format
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    // If no history data, create a single point with today's date
+    if (history.length === 0) {
+      return [{ date: todayStr, value: liveDisplayValue, alarm: isLiveAlarm }];
+    }
+
+    const updated = [...history];
+    const lastPoint = updated[updated.length - 1];
+
+    if (lastPoint.date === todayStr) {
+      // If the last point is already today, replace its value with live data
+      updated[updated.length - 1] = {
+        ...lastPoint,
+        value: liveDisplayValue,
+        alarm: isLiveAlarm,
+      };
+    } else {
+      // Otherwise, append a new point for today
+      updated.push({
+        date: todayStr,
+        value: liveDisplayValue,
+        alarm: isLiveAlarm,
+      });
+    }
+
+    return updated;
+  }, [history, tank, metric, currentVolumeLiters, limits]);
+
   const alarmEvents = React.useMemo(() => {
-    return history.filter((p) => p.alarm);
-  }, [history]);
+    return chartDataWithLive.filter((p) => p.alarm);
+  }, [chartDataWithLive]);
 
   if (!open || !tank) return null;
 
@@ -401,17 +481,27 @@ export default function TankDetailsModal({
               </div>
 
               <div className="text-sm text-black/60 dark:text-white/60">
-                Temp:{" "}
-                {typeof tank.temperatureValue === "number"
-                  ? `${tank.temperatureValue}${tank.temperatureUnit ?? "°C"}`
-                  : typeof tank.temperatureC === "number"
-                  ? `${tank.temperatureC.toFixed(1)}°C`
-                  : "--"}
-                <span className="mx-2 text-black/25 dark:text-white/25">•</span>
-                Vol:{" "}
-                {typeof tank.volumeValue === "number"
-                  ? `${tank.volumeValue}${tank.volumeUnit ?? "L"}`
-                  : `${Math.round(currentVolumeLiters)}L`}
+                {!tank.disableTemperature && (
+                  <>
+                    Temp:{" "}
+                    {typeof tank.temperatureValue === "number"
+                      ? `${tank.temperatureValue}${tank.temperatureUnit ?? "°C"}`
+                      : typeof tank.temperatureC === "number"
+                      ? `${tank.temperatureC.toFixed(1)}°C`
+                      : "--"}
+                  </>
+                )}
+                {!tank.disableTemperature && !tank.disableVolume && (
+                  <span className="mx-2 text-black/25 dark:text-white/25">•</span>
+                )}
+                {!tank.disableVolume && (
+                  <>
+                    Vol:{" "}
+                    {typeof tank.volumeValue === "number"
+                      ? `${tank.volumeValue}${tank.volumeUnit ?? "L"}`
+                      : `${Math.round(currentVolumeLiters)}L`}
+                  </>
+                )}
               </div>
 
               {limits ? (
@@ -455,43 +545,48 @@ export default function TankDetailsModal({
                 displayValue={selectedDisplay.value}
                 displayUnit={selectedDisplay.label}
                 accent={selectedDisplay.accent}
+                fluidColor={selectedDisplay.accent === "volume" ? tank.fluidColor : tank.tempColor}
               />
             </div>
 
             <div className="space-y-3">
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setMetric("volume")}
-                    className={[
-                      "rounded-full border px-4 py-2 text-xs transition",
-                      volumeAlarmNow
-                        ? metric === "volume"
-                          ? "border-red-400/60 bg-red-500/20 text-red-900 dark:text-red-100"
-                          : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200 hover:bg-red-500/15"
-                        : metric === "volume"
-                        ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
-                        : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
-                    ].join(" ")}
-                  >
-                    Volume
-                  </button>
+                  {!tank?.disableVolume && (
+                    <button
+                      onClick={() => setMetric("volume")}
+                      className={[
+                        "rounded-full border px-4 py-2 text-xs transition",
+                        volumeAlarmNow
+                          ? metric === "volume"
+                            ? "border-red-400/60 bg-red-500/20 text-red-900 dark:text-red-100"
+                            : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200 hover:bg-red-500/15"
+                          : metric === "volume"
+                          ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
+                          : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
+                      ].join(" ")}
+                    >
+                      Volume
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => setMetric("temperature")}
-                    className={[
-                      "rounded-full border px-4 py-2 text-xs transition",
-                      temperatureAlarmNow
-                        ? metric === "temperature"
-                          ? "border-red-400/60 bg-red-500/20 text-red-900 dark:text-red-100"
-                          : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200 hover:bg-red-500/15"
-                        : metric === "temperature"
-                        ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
-                        : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
-                    ].join(" ")}
-                  >
-                    Temperature
-                  </button>
+                  {!tank?.disableTemperature && (
+                    <button
+                      onClick={() => setMetric("temperature")}
+                      className={[
+                        "rounded-full border px-4 py-2 text-xs transition",
+                        temperatureAlarmNow
+                          ? metric === "temperature"
+                            ? "border-red-400/60 bg-red-500/20 text-red-900 dark:text-red-100"
+                            : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200 hover:bg-red-500/15"
+                          : metric === "temperature"
+                          ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
+                          : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
+                      ].join(" ")}
+                    >
+                      Temperature
+                    </button>
+                  )}
                   <div className="w-px bg-black/10 dark:bg-white/10 mx-1" />
                   <button
                     onClick={() => setResolution("daily")}
@@ -570,16 +665,19 @@ export default function TankDetailsModal({
                 </div>
               ) : (
                 <TankHistoryChart
-                  data={history}
+                  data={chartDataWithLive}
                   metric={metric}
                   unitLabel={selectedDisplay.label}
                   minLine={thresholdLines.min}
                   maxLine={thresholdLines.max}
+                  liveValue={selectedDisplay.value}
+                  liveLabel={selectedDisplay.label}
+                  color={selectedDisplay.accent === "volume" ? tank.fluidColor : tank.tempColor}
                 />
               )}
 
               <div className="text-xs text-black/45 dark:text-white/45">
-                Showing {history.length} day(s).
+                Showing {chartDataWithLive.length} day(s).
                 {limits ? (
                   <>
                     <span className="mx-1 text-black/25 dark:text-white/25">•</span>

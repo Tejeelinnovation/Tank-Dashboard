@@ -131,6 +131,10 @@ export default function TankDashboardLive() {
             Number(tankCapacities[i]) ||
             1000,
           variant: "rect",
+          fluidColor: row.fluid_color ?? row.fluidColor ?? undefined,
+          tempColor: row.temp_color ?? row.tempColor ?? undefined,
+          disableVolume: !!(row.disable_volume ?? row.disableVolume),
+          disableTemperature: !!(row.disable_temperature ?? row.disableTemperature),
           metrics: [
             {
               channel: String(
@@ -156,7 +160,7 @@ export default function TankDashboardLive() {
         };
       });
 
-      const influxRes = await fetch("/api/influx/latest", { cache: "no-store" });
+      const influxRes = await fetch(`/api/influx/latest?slug=${encodeURIComponent(slug)}`, { cache: "no-store" });
       const influxJson = await influxRes.json().catch(() => ({}));
 
       if (!influxRes.ok) {
@@ -174,13 +178,13 @@ export default function TankDashboardLive() {
           (r: any) => r.channel === temperatureMetric.channel
         );
 
-        const volumeRaw = toNumber(volumeRow?._value);
-        const temperatureRaw = toNumber(temperatureRow?._value);
+        const volumeRaw = cfg.disableVolume ? undefined : toNumber(volumeRow?._value);
+        const temperatureRaw = cfg.disableTemperature ? undefined : toNumber(temperatureRow?._value);
         
         const hasData = volumeRaw !== undefined;
 
         const volumeLiters =
-          volumeRaw !== undefined
+          !cfg.disableVolume && volumeRaw !== undefined
             ? convertVolumeToLiters(
                 volumeRaw,
                 volumeMetric.unit,
@@ -189,7 +193,7 @@ export default function TankDashboardLive() {
             : 0;
 
         const level =
-          volumeRaw !== undefined
+          !cfg.disableVolume && volumeRaw !== undefined
             ? getVolumePercent(
                 volumeRaw,
                 volumeMetric.unit,
@@ -198,7 +202,7 @@ export default function TankDashboardLive() {
             : 0;
 
         const temperatureC =
-          temperatureRaw !== undefined
+          !cfg.disableTemperature && temperatureRaw !== undefined
             ? convertTemperatureToC(temperatureRaw, temperatureMetric.unit)
             : undefined;
 
@@ -209,17 +213,21 @@ export default function TankDashboardLive() {
           temperatureC,
           capacityLiters: cfg.capacityLiters,
           variant: "rect",
-          volumeChannel: volumeMetric.channel,
-          temperatureChannel: temperatureMetric.channel,
+          volumeChannel: cfg.disableVolume ? "" : volumeMetric.channel,
+          temperatureChannel: cfg.disableTemperature ? "" : temperatureMetric.channel,
           volumeUnit: volumeMetric.unit,
           temperatureUnit: temperatureMetric.unit,
           hasData,
+          fluidColor: cfg.fluidColor,
+          tempColor: cfg.tempColor,
+          disableVolume: cfg.disableVolume,
+          disableTemperature: cfg.disableTemperature,
           volumeValue:
-            volumeRaw !== undefined
+            !cfg.disableVolume && volumeRaw !== undefined
               ? Math.round(volumeRaw * 100) / 100
               : Math.round(volumeLiters),
           temperatureValue:
-            temperatureRaw !== undefined
+            !cfg.disableTemperature && temperatureRaw !== undefined
               ? Math.round(temperatureRaw * 10) / 10
               : undefined,
         };

@@ -11,6 +11,7 @@ import TankDetailsModal from "@/components/tanks/TankDetailsModal";
 import {
   type VolumeUnit,
   type TemperatureUnit,
+  type MetricMode,
   convertMaToLiters,
   convertFromLiters,
   convertTemperature,
@@ -21,6 +22,12 @@ type TankSetupItem = {
   name: string;
   capacityLiters: number;
   variant?: "rect";
+  fluidColor?: string;
+  tempColor?: string;
+  disableVolume?: boolean;
+  disableTemperature?: boolean;
+  volumeMode?: MetricMode;
+  temperatureMode?: MetricMode;
   metrics: [
     { channel: string; type: "volume"; unit: VolumeUnit },
     { channel: string; type: "temperature"; unit: TemperatureUnit }
@@ -34,6 +41,32 @@ function toNumber(value: unknown) {
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function normalizeVolumeUnit(value: unknown): VolumeUnit {
+  const raw = String(value || "L").trim();
+
+  const allowed = new Set([
+    "L",
+    "l",
+    "liter",
+    "liters",
+    "ml",
+    "mL",
+    "gal",
+    "gallon",
+    "gallons",
+  ]);
+
+  return allowed.has(raw) ? (raw as VolumeUnit) : ("L" as VolumeUnit);
+}
+
+function normalizeTemperatureUnit(value: unknown): TemperatureUnit {
+  const raw = String(value || "°C").trim();
+
+  const allowed = new Set(["°C", "°F", "C", "F"]);
+
+  return allowed.has(raw) ? (raw as TemperatureUnit) : ("°C" as TemperatureUnit);
 }
 
 function makeDefaultTank(i: number): TankSetupItem {
@@ -83,7 +116,11 @@ export default function CompanyDashboardPage() {
       );
 
       const settingsJson = await settingsRes.json().catch(() => ({}));
-      if (!settingsRes.ok || !settingsJson?.ok) return;
+
+      if (!settingsRes.ok || !settingsJson?.ok) {
+        setLoading(false);
+        return;
+      }
 
       const company = settingsJson?.company || {};
       const tanksCount = clamp(Number(company.tanksCount ?? 1), 1, 20);
@@ -115,16 +152,22 @@ export default function CompanyDashboardPage() {
             capacityLiters:
               Number(row.capacityLiters) || Number(tankCapacities[i]) || 1000,
             variant: "rect",
+            fluidColor: row.fluidColor || row.fluid_color,
+            tempColor: row.tempColor || row.temp_color,
+            disableVolume: !!(row.disableVolume ?? row.disable_volume),
+            disableTemperature: !!(row.disableTemperature ?? row.disable_temperature),
+            volumeMode: row.volumeMode || row.volume_mode || "default",
+            temperatureMode: row.temperatureMode || row.temperature_mode || "default",
             metrics: [
               {
                 channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(),
                 type: "volume",
-                unit: String(row.volumeUnit || "L").trim() as VolumeUnit,
+                unit: normalizeVolumeUnit(row.volumeUnit),
               },
               {
                 channel: String(row.temperatureChannel ?? `CH${i * 2 + 2}`).trim(),
                 type: "temperature",
-                unit: String(row.temperatureUnit || "°C").trim() as TemperatureUnit,
+                unit: normalizeTemperatureUnit(row.temperatureUnit),
               },
             ],
           };
@@ -135,6 +178,8 @@ export default function CompanyDashboardPage() {
       setAlarmMap(settingsJson?.alarms || {});
     } catch (e) {
       console.error("Failed to load settings", e);
+      setErr("Failed to load company settings");
+      setLoading(false);
     }
   }, [slug]);
 
@@ -175,24 +220,33 @@ export default function CompanyDashboardPage() {
           (r: any) => r.channel === temperatureMetric.channel
         );
 
-        const mA = toNumber(volumeRow?._value);
+        const volumeRaw = cfg.disableVolume ? undefined : toNumber(volumeRow?._value);
         const volumeLiters =
-          mA !== undefined ? convertMaToLiters(mA, cfg.capacityLiters) : 0;
+          volumeRaw !== undefined ? convertMaToLiters(volumeRaw, cfg.capacityLiters, cfg.volumeMode) : 0;
 
-        const temperatureRaw = toNumber(temperatureRow?._value);
-        const temperatureC =
-          temperatureRaw !== undefined
-            ? convertTemperature(temperatureRaw, temperatureMetric.unit, "°C")
-            : undefined;
+        const temperatureRaw = cfg.disableTemperature ? undefined : toNumber(temperatureRow?._value);
+        let temperatureC = undefined;
+        if (temperatureRaw !== undefined) {
+          if (cfg.temperatureMode === "percent") {
+            temperatureC = temperatureRaw;
+          } else if (cfg.temperatureMode === "inverted") {
+            temperatureC = 100 - temperatureRaw;
+          } else {
+            temperatureC = convertTemperature(temperatureRaw, temperatureMetric.unit, "°C");
+          }
+        }
 
         let hasData = false;
+        const now = Date.now();
+        const oneHour = 60 * 60 * 1000;
 
-        if (volumeRow?._time) {
-          const pointTime = new Date(volumeRow._time).getTime();
-
-          if (!Number.isNaN(pointTime) && Date.now() - pointTime <= 60 * 60 * 1000) {
-            hasData = true;
-          }
+        if (!cfg.disableVolume && volumeRow?._time) {
+          const pt = new Date(volumeRow._time).getTime();
+          if (!Number.isNaN(pt) && Math.abs(now - pt) <= oneHour) hasData = true;
+        }
+        if (!hasData && !cfg.disableTemperature && temperatureRow?._time) {
+          const pt = new Date(temperatureRow._time).getTime();
+          if (!Number.isNaN(pt) && Math.abs(now - pt) <= oneHour) hasData = true;
         }
 
         const level =
@@ -216,6 +270,10 @@ export default function CompanyDashboardPage() {
           volumeUnit: volumeMetric.unit,
           temperatureUnit: temperatureMetric.unit,
           hasData,
+          fluidColor: cfg.fluidColor,
+          tempColor: cfg.tempColor,
+          disableVolume: cfg.disableVolume,
+          disableTemperature: cfg.disableTemperature,
           volumeValue: Math.round(volumeValue * 100) / 100,
           temperatureValue:
             temperatureRaw !== undefined
@@ -243,7 +301,10 @@ export default function CompanyDashboardPage() {
     }
   }, [setupTanks, loadData]);
 
-  useVisibilityPolling(loadData, 10000);
+  useVisibilityPolling(() => {
+    loadData();
+    loadSettings();
+  }, 10000);
 
   useEffect(() => {
     if (!err) return;

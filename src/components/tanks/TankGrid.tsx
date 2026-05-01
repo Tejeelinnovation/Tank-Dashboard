@@ -3,7 +3,7 @@
 import * as React from "react";
 import TankCard from "./TankCard";
 import type { TankAlarmLimits } from "@/types/alarm";
-import { type VolumeUnit, type TemperatureUnit } from "@/lib/conversions";
+import type { VolumeUnit, TemperatureUnit, MetricMode } from "@/lib/conversions";
 
 export type Tank = {
   id: string;
@@ -12,13 +12,20 @@ export type Tank = {
   temperatureC?: number;
   capacityLiters?: number;
   variant?: "rect" | "cylinder";
+
   volumeChannel?: string;
   temperatureChannel?: string;
   volumeUnit?: VolumeUnit;
   temperatureUnit?: TemperatureUnit;
+  hasData?: boolean;
   volumeValue?: number;
   temperatureValue?: number;
-  hasData?: boolean;
+  fluidColor?: string;
+  tempColor?: string;
+  disableVolume?: boolean;
+  disableTemperature?: boolean;
+  volumeMode?: MetricMode;
+  temperatureMode?: MetricMode;
 };
 
 type TankGridProps = {
@@ -50,11 +57,11 @@ function safeNum(v: any, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-import { 
-  pickAlarmLimits as pickLimits, 
-  getTankAlarmReasons as getAlarmReasons, 
+import {
+  pickAlarmLimits as pickLimits,
+  getTankAlarmReasons as getAlarmReasons,
   normalizeLevelPercent,
-  currentVolumeL 
+  currentVolumeL
 } from "@/lib/alarm";
 
 export default function TankGrid({
@@ -120,23 +127,23 @@ export default function TankGrid({
 
   const lastAlarmSignatureRef = React.useRef("");
 
-React.useEffect(() => {
-  if (!onAlarmList) return;
+  React.useEffect(() => {
+    if (!onAlarmList) return;
 
-  const sig = JSON.stringify(
-    alarmEvents.map((a) => ({
-      tankId: a.tankId,
-      reason: a.reason,
-      volumeL: a.volumeL,
-      temperatureC: a.temperatureC,
-    }))
-  );
+    const sig = JSON.stringify(
+      alarmEvents.map((a) => ({
+        tankId: a.tankId,
+        reason: a.reason,
+        volumeL: a.volumeL,
+        temperatureC: a.temperatureC,
+      }))
+    );
 
-  if (lastAlarmSignatureRef.current === sig) return;
+    if (lastAlarmSignatureRef.current === sig) return;
 
-  lastAlarmSignatureRef.current = sig;
-  onAlarmList(alarmEvents);
-}, [alarmEvents, onAlarmList]);
+    lastAlarmSignatureRef.current = sig;
+    onAlarmList(alarmEvents);
+  }, [alarmEvents, onAlarmList]);
 
 
   if (disabled) {
@@ -196,6 +203,10 @@ React.useEffect(() => {
               alarmActive={alarmActive}
               alarmLabel={alarmActive ? alarmReasons.join(", ") : "Within limits"}
               hasData={tank.hasData}
+              fluidColor={tank.fluidColor}
+              tempColor={tank.tempColor}
+              disableVolume={tank.disableVolume}
+              disableTemperature={tank.disableTemperature}
               onOpen={onOpenTank ? () => onOpenTank(tank) : undefined}
             />
           );
