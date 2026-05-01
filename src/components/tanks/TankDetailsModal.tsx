@@ -304,7 +304,11 @@ export default function TankDetailsModal({
 
           if (metric === "volume") {
             const unit = tank.volumeUnit ?? "L";
-            const liters = convertMaToLiters(raw, capacity, tank.volumeMode);
+            let liters = convertMaToLiters(raw, capacity, tank.volumeMode);
+            
+            // Apply calibration Y = MX + C
+            liters = (liters * (tank.volumeM ?? 1.0)) + (tank.volumeC ?? 0.0);
+
             const displayValue = roundForUnit(
               convertFromLiters(liters, unit, capacity),
               unit
@@ -329,6 +333,9 @@ export default function TankDetailsModal({
           } else {
             tempC = convertTemperature(raw, unit, "°C");
           }
+
+          // Apply calibration Y = MX + C
+          tempC = (tempC * (tank.temperatureM ?? 1.0)) + (tank.temperatureC_factor ?? 0.0);
 
           const displayValue =
             unit === "°F"

@@ -26,6 +26,10 @@ export type Tank = {
   disableTemperature?: boolean;
   volumeMode?: MetricMode;
   temperatureMode?: MetricMode;
+  volumeM?: number;
+  volumeC?: number;
+  temperatureM?: number;
+  temperatureC_factor?: number;
 };
 
 type TankGridProps = {

@@ -28,6 +28,10 @@ type TankSetupItem = {
   disableTemperature?: boolean;
   volumeMode?: MetricMode;
   temperatureMode?: MetricMode;
+  volumeM?: number;
+  volumeC?: number;
+  temperatureM?: number;
+  temperatureC_factor?: number;
   metrics: [
     { channel: string; type: "volume"; unit: VolumeUnit },
     { channel: string; type: "temperature"; unit: TemperatureUnit }
@@ -158,6 +162,10 @@ export default function CompanyDashboardPage() {
             disableTemperature: !!(row.disableTemperature ?? row.disable_temperature),
             volumeMode: row.volumeMode || row.volume_mode || "default",
             temperatureMode: row.temperatureMode || row.temperature_mode || "default",
+            volumeM: row.volumeM ?? row.volume_m ?? 1.0,
+            volumeC: row.volumeC ?? row.volume_c ?? 0.0,
+            temperatureM: row.temperatureM ?? row.temperature_m ?? 1.0,
+            temperatureC_factor: row.temperatureC_factor ?? row.temperature_c ?? 0.0,
             metrics: [
               {
                 channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(),
@@ -221,8 +229,13 @@ export default function CompanyDashboardPage() {
         );
 
         const volumeRaw = cfg.disableVolume ? undefined : toNumber(volumeRow?._value);
-        const volumeLiters =
+        let volumeLiters =
           volumeRaw !== undefined ? convertMaToLiters(volumeRaw, cfg.capacityLiters, cfg.volumeMode) : 0;
+        
+        // Apply calibration Y = MX + C
+        if (volumeLiters !== undefined) {
+          volumeLiters = (volumeLiters * (cfg.volumeM ?? 1.0)) + (cfg.volumeC ?? 0.0);
+        }
 
         const temperatureRaw = cfg.disableTemperature ? undefined : toNumber(temperatureRow?._value);
         let temperatureC = undefined;
@@ -233,6 +246,11 @@ export default function CompanyDashboardPage() {
             temperatureC = 100 - temperatureRaw;
           } else {
             temperatureC = convertTemperature(temperatureRaw, temperatureMetric.unit, "°C");
+          }
+
+          // Apply calibration Y = MX + C
+          if (temperatureC !== undefined) {
+            temperatureC = (temperatureC * (cfg.temperatureM ?? 1.0)) + (cfg.temperatureC_factor ?? 0.0);
           }
         }
 

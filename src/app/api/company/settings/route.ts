@@ -141,6 +141,10 @@ export async function GET(req: NextRequest) {
       temperatureMax: row.temperature_max != null ? Number(row.temperature_max) : null,
       volumeMode: row.volume_mode || "default",
       temperatureMode: row.temperature_mode || "default",
+      volumeM: row.volume_m != null ? Number(row.volume_m) : 1.0,
+      volumeC: row.volume_c != null ? Number(row.volume_c) : 0.0,
+      temperatureM: row.temperature_m != null ? Number(row.temperature_m) : 1.0,
+      temperatureC_factor: row.temperature_c != null ? Number(row.temperature_c) : 0.0, // using temperatureC_factor to avoid confusion with current temp
     }));
 
     const alarmsRes = await pool.query(
@@ -309,9 +313,13 @@ export async function POST(req: NextRequest) {
           disable_temperature,
           volume_mode,
           temperature_mode,
+          volume_m,
+          volume_c,
+          temperature_m,
+          temperature_c,
           updated_at
         )
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,now())
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,now())
         `,
         [
           companyId,
@@ -331,7 +339,11 @@ export async function POST(req: NextRequest) {
           disableVolume,
           disableTemperature,
           tank?.volumeMode || "default",
-          tank?.temperatureMode || "default"
+          tank?.temperatureMode || "default",
+          tank?.volumeM != null ? Number(tank.volumeM) : 1.0,
+          tank?.volumeC != null ? Number(tank.volumeC) : 0.0,
+          tank?.temperatureM != null ? Number(tank.temperatureM) : 1.0,
+          tank?.temperatureC_factor != null ? Number(tank.temperatureC_factor) : 0.0
         ]
       );
     }

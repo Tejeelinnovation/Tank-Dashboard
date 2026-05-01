@@ -27,6 +27,10 @@ type TankSetupItem = {
   disableTemperature?: boolean;
   volumeMode?: "default" | "percent" | "inverted";
   temperatureMode?: "default" | "percent" | "inverted";
+  volumeM?: number;
+  volumeC?: number;
+  temperatureM?: number;
+  temperatureC_factor?: number;
   metrics: [
     { channel: string; type: "volume"; unit: VolumeUnit },
     { channel: string; type: "temperature"; unit: TemperatureUnit }
@@ -112,6 +116,10 @@ function normalizeTank(
     disableTemperature: !!t?.disableTemperature,
     volumeMode: t?.volumeMode || "default",
     temperatureMode: t?.temperatureMode || "default",
+    volumeM: t?.volumeM != null ? Number(t.volumeM) : 1.0,
+    volumeC: t?.volumeC != null ? Number(t.volumeC) : 0.0,
+    temperatureM: t?.temperatureM != null ? Number(t.temperatureM) : 1.0,
+    temperatureC_factor: t?.temperatureC_factor != null ? Number(t.temperatureC_factor) : 0.0,
     metrics: [
       normalizeVolumeMetric(metrics[0] || t, `CH${i * 2 + 1}`),
       normalizeTemperatureMetric(metrics[1] || t, `CH${i * 2 + 2}`),
@@ -389,7 +397,7 @@ export default function CompanySetupPage() {
     });
   }
 
-  function updateTankField<K extends "name" | "capacityLiters" | "disableVolume" | "disableTemperature" | "volumeMode" | "temperatureMode">(
+  function updateTankField<K extends "name" | "capacityLiters" | "disableVolume" | "disableTemperature" | "volumeMode" | "temperatureMode" | "volumeM" | "volumeC" | "temperatureM" | "temperatureC_factor">(
     i: number,
     key: K,
     value: TankSetupItem[K]
@@ -941,6 +949,16 @@ export default function CompanySetupPage() {
                                     <option value="inverted">Inverted (100-0)</option>
                                 </select>
                             </div>
+                            <div className={`grid grid-cols-2 gap-2 ${tank.disableVolume ? 'pointer-events-none' : ''}`}>
+                                <div>
+                                    <span className="text-[10px] opacity-60">Factor M</span>
+                                    <input type="number" step="0.0001" value={tank.volumeM ?? 1} onChange={(e) => updateTankField(i, "volumeM", Number(e.target.value))} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20" />
+                                </div>
+                                <div>
+                                    <span className="text-[10px] opacity-60">Offset C</span>
+                                    <input type="number" step="0.1" value={tank.volumeC ?? 0} onChange={(e) => updateTankField(i, "volumeC", Number(e.target.value))} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20" />
+                                </div>
+                            </div>
                           </div>
 
                           <div className={`p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5 ${tank.disableTemperature ? 'opacity-50 grayscale' : ''}`}>
@@ -970,6 +988,16 @@ export default function CompanySetupPage() {
                                     <option value="percent">Percentage (0-100)</option>
                                     <option value="inverted">Inverted (100-0)</option>
                                 </select>
+                            </div>
+                            <div className={`grid grid-cols-2 gap-2 ${tank.disableTemperature ? 'pointer-events-none' : ''}`}>
+                                <div>
+                                    <span className="text-[10px] opacity-60">Factor M</span>
+                                    <input type="number" step="0.0001" value={tank.temperatureM ?? 1} onChange={(e) => updateTankField(i, "temperatureM", Number(e.target.value))} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20" />
+                                </div>
+                                <div>
+                                    <span className="text-[10px] opacity-60">Offset C</span>
+                                    <input type="number" step="0.1" value={tank.temperatureC_factor ?? 0} onChange={(e) => updateTankField(i, "temperatureC_factor", Number(e.target.value))} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20" />
+                                </div>
                             </div>
                           </div>
                         </div>
