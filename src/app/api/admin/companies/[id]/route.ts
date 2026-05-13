@@ -5,13 +5,17 @@ import { isAdminLoggedIn } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { deleteCompany, updateCompany } from "@/lib/dbCompanies";
 
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: RouteContext
 ) {
-  const { id } = await params;
-  const ok = await isAdminLoggedIn();
+  const { id } = await context.params;
 
+  const ok = await isAdminLoggedIn();
   if (!ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -23,11 +27,11 @@ export async function DELETE(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: RouteContext
 ) {
-  const { id } = await params;
-  const ok = await isAdminLoggedIn();
+  const { id } = await context.params;
 
+  const ok = await isAdminLoggedIn();
   if (!ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -35,7 +39,37 @@ export async function PATCH(
   const body = await req.json().catch(() => ({}));
   const patch: any = {};
 
-  // Handle password update
+  // name
+  if (body.name !== undefined) {
+    patch.name = String(body.name).trim();
+  }
+
+  // login id
+  if (body.companyLoginId !== undefined) {
+    patch.companyLoginId = String(body.companyLoginId).trim();
+  }
+
+  // tanks count
+  if (body.tanksCount !== undefined) {
+    patch.tanksCount = Math.max(1, Number(body.tanksCount) || 1);
+  }
+
+  // logo (IMPORTANT FIX)
+  if (body.logoUrl !== undefined) {
+    const val = String(body.logoUrl).trim();
+    patch.logoUrl = val || null;
+  }
+
+  // influx
+  if (body.influxOrg !== undefined) {
+    patch.influxOrg = String(body.influxOrg).trim();
+  }
+
+  if (body.influxBucket !== undefined) {
+    patch.influxBucket = String(body.influxBucket).trim();
+  }
+
+  // password update
   if (body.password !== undefined) {
     const pw = String(body.password).trim();
     if (pw) {
@@ -45,18 +79,10 @@ export async function PATCH(
     }
   }
 
-  // Handle reset approval
+  // reset approval
   if (body.pwd_reset_approved !== undefined) {
     patch.pwd_reset_approved = !!body.pwd_reset_approved;
   }
-
-  // Handle new fields
-  if (body.name !== undefined) patch.name = String(body.name).trim();
-  if (body.logoUrl !== undefined) patch.logoUrl = String(body.logoUrl).trim();
-  if (body.companyLoginId !== undefined) patch.companyLoginId = String(body.companyLoginId).trim();
-  if (body.influxOrg !== undefined) patch.influxOrg = String(body.influxOrg).trim();
-  if (body.influxBucket !== undefined) patch.influxBucket = String(body.influxBucket).trim();
-  if (body.tanksCount !== undefined) patch.tanksCount = Number(body.tanksCount);
 
   const updated = await updateCompany(id, patch);
 

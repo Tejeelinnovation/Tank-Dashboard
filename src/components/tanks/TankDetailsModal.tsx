@@ -24,8 +24,9 @@ type TankMetric = "volume" | "temperature";
 
 type ChartPoint = {
   date: string;
-  value: number;
+  value: number | null;
   alarm: boolean;
+  timestamp: number;
 };
 
 function toDateInputValue(d: Date) {
@@ -68,7 +69,7 @@ export default function TankDetailsModal({
   tank: Tank | null;
   alarmMap: Record<string, TankAlarmLimits>;
   hourlyRefreshInterval?: number;
-}) {
+}): React.ReactNode {
   const tankId = tank?.id ?? "";
   const tankName = tank?.name ?? "";
 
@@ -80,6 +81,7 @@ export default function TankDetailsModal({
   const [resolution, setResolution] = React.useState<"daily" | "time">("daily");
   const [startTimeStr, setStartTimeStr] = React.useState("00:00");
   const [endTimeStr, setEndTimeStr] = React.useState("23:59");
+  const [alarmHistory, setAlarmHistory] = React.useState<any[]>([]);
 
   const today = React.useMemo(() => {
     const d = new Date();
@@ -227,13 +229,29 @@ export default function TankDetailsModal({
     };
   }, [tank, limits, metric]);
 
+  const chartXDomain = React.useMemo(() => {
+    const start = parseDateInput(startStr);
+    const end = parseDateInput(endStr);
+
+    if (resolution === "time") {
+      const [sh, sm] = startTimeStr.split(':').map(Number);
+      start.setHours(sh || 0, sm || 0, 0, 0);
+      const [eh, em] = endTimeStr.split(':').map(Number);
+      end.setHours(eh || 23, em || 59, 59, 999);
+    } else {
+      end.setDate(end.getDate() + 1);
+    }
+
+    return [start.getTime(), end.getTime()] as [number, number];
+  }, [startStr, endStr, startTimeStr, endTimeStr, resolution]);
+
   React.useEffect(() => {
     let cancelled = false;
 
     async function loadHistory() {
-      if (!open || !tank) return;
-
-      const channel = metric === "volume" ? tank.volumeChannel : tank.temperatureChannel;
+      const tnk = tank;
+      if (!open || !tnk) return;
+      const channel = metric === "volume" ? tnk.volumeChannel : tnk.temperatureChannel;
       if (!channel) {
         if (!cancelled) {
           setHistory([]);
@@ -250,6 +268,7 @@ export default function TankDetailsModal({
         const [sh, sm] = startTimeStr.split(':').map(Number);
         start.setHours(sh || 0, sm || 0, 0, 0);
         const [eh, em] = endTimeStr.split(':').map(Number);
+        stop.setTime(start.getTime()); // Same day
         stop.setHours(eh || 23, em || 59, 59, 999);
       } else {
         stop.setDate(stop.getDate() + 1);
@@ -270,14 +289,21 @@ export default function TankDetailsModal({
       }
 
       try {
-        const res = await fetch(
-          `/api/influx/history/${encodeURIComponent(channel)}?start=${encodeURIComponent(
-            start.toISOString()
-          )}&end=${encodeURIComponent(stop.toISOString())}&res=${resolution}`,
-          { cache: "no-store" }
-        );
+        const [res, alarmRes] = await Promise.all([
+          fetch(
+            `/api/influx/history/${encodeURIComponent(channel)}?start=${encodeURIComponent(
+              start.toISOString()
+            )}&end=${encodeURIComponent(stop.toISOString())}&res=${resolution}`,
+            { cache: "no-store" }
+          ),
+          fetch(
+            `/api/alarms/history?slug=${tnk.companySlug || ""}&tankKey=${encodeURIComponent(tnk.tankKey || "")}&start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(stop.toISOString())}`,
+            { cache: "no-store" }
+          )
+        ]);
 
         const j = await res.json().catch(() => ({}));
+        const aj = await alarmRes.json().catch(() => ({ rows: [] }));
 
         if (!res.ok) {
           if (!cancelled) {
@@ -289,9 +315,11 @@ export default function TankDetailsModal({
         }
 
         const rows = Array.isArray(j?.rows) ? j.rows : [];
-        const capacity = tank.capacityLiters ?? 1000;
+        const alarmsHistoryRows = Array.isArray(aj?.rows) ? aj.rows : [];
+        const capacity = tnk.capacityLiters ?? 1000;
 
-        const mapped: ChartPoint[] = rows.map((r: any) => {
+        const mapped: any[] = rows.map((r: any) => {
+          const t = new Date(r._time).getTime();
           const date = resolution === "time"
             ? new Date(r._time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             : String(r?._time ?? "").slice(0, 10);
@@ -299,15 +327,19 @@ export default function TankDetailsModal({
           const raw = r?._value !== null ? Number(r._value) : null;
 
           if (raw === null || !Number.isFinite(raw)) {
-            return { date, value: null, alarm: false };
+            return { date, value: null, alarm: false, timestamp: t };
           }
 
+          const hasHistoricalAlarm = alarmsHistoryRows.some((ar: any) => {
+            const art = new Date(ar.created_at).getTime();
+            const metricMatch = ar.metric === metric;
+            return metricMatch && Math.abs(art - t) < (resolution === "time" ? 1800000 : 43200000);
+          });
+
           if (metric === "volume") {
-            const unit = tank.volumeUnit ?? "L";
-            let liters = convertMaToLiters(raw, capacity, tank.volumeMode);
-            
-            // Apply calibration Y = MX + C
-            liters = (liters * (tank.volumeM ?? 1.0)) + (tank.volumeC ?? 0.0);
+            const unit = tnk.volumeUnit ?? "L";
+            let liters = convertMaToLiters(raw, capacity, tnk.volumeMode);
+            liters = (liters * (tnk.volumeM ?? 1.0)) + (tnk.volumeC ?? 0.0);
 
             const displayValue = roundForUnit(
               convertFromLiters(liters, unit, capacity),
@@ -317,25 +349,26 @@ export default function TankDetailsModal({
             return {
               date,
               value: displayValue,
+              timestamp: t,
               alarm:
-                !!limits &&
+                hasHistoricalAlarm ||
+                (!!limits &&
                 ((typeof limits.minVolumeL === "number" && liters < limits.minVolumeL) ||
-                  (typeof limits.maxVolumeL === "number" && liters > limits.maxVolumeL)),
+                  (typeof limits.maxVolumeL === "number" && liters > limits.maxVolumeL))),
             };
           }
 
-          const unit = tank.temperatureUnit ?? "°C";
+          const unit = tnk.temperatureUnit ?? "°C";
           let tempC = 0;
-          if (tank.temperatureMode === "percent") {
+          if (tnk.temperatureMode === "percent") {
             tempC = raw;
-          } else if (tank.temperatureMode === "inverted") {
+          } else if (tnk.temperatureMode === "inverted") {
             tempC = 100 - raw;
           } else {
             tempC = convertTemperature(raw, unit, "°C");
           }
 
-          // Apply calibration Y = MX + C
-          tempC = (tempC * (tank.temperatureM ?? 1.0)) + (tank.temperatureC_factor ?? 0.0);
+          tempC = (tempC * (tnk.temperatureM ?? 1.0)) + (tnk.temperatureC_factor ?? 0.0);
 
           const displayValue =
             unit === "°F"
@@ -345,18 +378,47 @@ export default function TankDetailsModal({
           return {
             date,
             value: displayValue,
+            timestamp: t,
             alarm:
-              !!limits &&
+              hasHistoricalAlarm ||
+              (!!limits &&
               ((typeof limits.minTempC === "number" && tempC < limits.minTempC) ||
-                (typeof limits.maxTempC === "number" && tempC > limits.maxTempC)),
+                (typeof limits.maxTempC === "number" && tempC > limits.maxTempC))),
           };
         });
 
         if (!cancelled) {
-          setHistory(mapped);
+          let finalData = mapped;
+          
+          // Inject nulls for gaps > 15 mins in time-based mode
+          if (resolution === "time" && mapped.length > 1) {
+            const withGaps: any[] = [];
+            const GAP_THRESHOLD = 15 * 60 * 1000; // 15 minutes
+
+            for (let i = 0; i < mapped.length; i++) {
+              withGaps.push(mapped[i]);
+              if (i < mapped.length - 1) {
+                const diff = mapped[i+1].timestamp - mapped[i].timestamp;
+                if (diff > GAP_THRESHOLD) {
+                  // Inject a null point in the middle of the gap to break the line
+                  withGaps.push({
+                    date: mapped[i].date,
+                    value: null,
+                    alarm: false,
+                    timestamp: mapped[i].timestamp + 1
+                  });
+                }
+              }
+            }
+            finalData = withGaps;
+          }
+
+          setHistory(finalData);
+          setAlarmHistory(alarmsHistoryRows);
           setHistoryLoading(false);
         }
-      } catch {
+      } catch (err) {
+        console.error("Failed to load history:", err);
         if (!cancelled) {
           setHistory([]);
           setHistoryError("Failed to load history");
@@ -378,6 +440,14 @@ export default function TankDetailsModal({
     tank?.volumeUnit,
     tank?.temperatureUnit,
     tank?.capacityLiters,
+    tank?.volumeMode,
+    tank?.temperatureMode,
+    tank?.volumeM,
+    tank?.volumeC,
+    tank?.temperatureM,
+    tank?.temperatureC_factor,
+    tank?.companySlug,
+    tank?.tankKey,
     metric,
     startStr,
     endStr,
@@ -430,36 +500,40 @@ export default function TankDetailsModal({
           (typeof limits.maxTempC === "number" && tempC > limits.maxTempC));
     }
 
-    // Format today as YYYY-MM-DD (local time) to match historical data format
+    // Format today as YYYY-MM-DD (local time) or HH:mm
     const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const displayLabel = resolution === "time" ? timeStr : todayStr;
 
     // If no history data, create a single point with today's date
     if (history.length === 0) {
-      return [{ date: todayStr, value: liveDisplayValue, alarm: isLiveAlarm }];
+      return [{ date: displayLabel, value: liveDisplayValue, alarm: isLiveAlarm, timestamp: now.getTime() }];
     }
 
     const updated = [...history];
     const lastPoint = updated[updated.length - 1];
 
-    if (lastPoint.date === todayStr) {
-      // If the last point is already today, replace its value with live data
+    if (lastPoint.date === displayLabel) {
+      // If the last point is already the current time/day, replace its value with live data
       updated[updated.length - 1] = {
         ...lastPoint,
         value: liveDisplayValue,
         alarm: isLiveAlarm,
+        timestamp: now.getTime()
       };
     } else {
-      // Otherwise, append a new point for today
+      // Otherwise, append a new point
       updated.push({
-        date: todayStr,
+        date: displayLabel,
         value: liveDisplayValue,
         alarm: isLiveAlarm,
+        timestamp: now.getTime()
       });
     }
 
     return updated;
-  }, [history, tank, metric, currentVolumeLiters, limits]);
+  }, [history, tank, metric, currentVolumeLiters, limits, resolution]);
 
   const alarmEvents = React.useMemo(() => {
     return chartDataWithLive.filter((p) => p.alarm);
@@ -621,11 +695,14 @@ export default function TankDetailsModal({
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                   <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">From</span>
+                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">{resolution === "time" ? "Date" : "From"}</span>
                     <input
                       type="date"
                       value={startStr}
-                      onChange={(e) => setStartStr(e.target.value)}
+                      onChange={(e) => {
+                        setStartStr(e.target.value);
+                        if (resolution === "time") setEndStr(e.target.value);
+                      }}
                       className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[130px]"
                     />
                     {resolution === "time" && (
@@ -639,13 +716,15 @@ export default function TankDetailsModal({
                   </div>
 
                   <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">To</span>
-                    <input
-                      type="date"
-                      value={endStr}
-                      onChange={(e) => setEndStr(e.target.value)}
-                      className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[130px]"
-                    />
+                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">{resolution === "time" ? "To" : "To"}</span>
+                    {resolution !== "time" && (
+                      <input
+                        type="date"
+                        value={endStr}
+                        onChange={(e) => setEndStr(e.target.value)}
+                        className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[130px]"
+                      />
+                    )}
                     {resolution === "time" && (
                       <input
                         type="time"
@@ -680,17 +759,35 @@ export default function TankDetailsModal({
                   liveValue={selectedDisplay.value}
                   liveLabel={selectedDisplay.label}
                   color={selectedDisplay.accent === "volume" ? tank.fluidColor : tank.tempColor}
+                  capacity={tank.capacityLiters}
+                  xDomain={chartXDomain}
                 />
               )}
 
-              <div className="text-xs text-black/45 dark:text-white/45">
-                Showing {chartDataWithLive.length} day(s).
-                {limits ? (
-                  <>
-                    <span className="mx-1 text-black/25 dark:text-white/25">•</span>
-                    Alarm points: {alarmEvents.length}
-                  </>
-                ) : null}
+              <div className="flex items-center justify-between text-xs text-black/45 dark:text-white/45">
+                <div>
+                  {resolution === "time" ? (
+                    <>Showing data for {startTimeStr} to {endTimeStr}</>
+                  ) : (
+                    <>Showing {chartDataWithLive.length} day(s).</>
+                  )}
+                  {limits ? (
+                    <>
+                      <span className="mx-1 text-black/25 dark:text-white/25">•</span>
+                      Alarm points: {alarmEvents.length}
+                    </>
+                  ) : null}
+                </div>
+                {alarmHistory.length > 0 && (
+                  <a 
+                    href={`/api/alarms/export?slug=${tank.companySlug || ""}&tankKey=${encodeURIComponent(tank.tankKey || "")}&start=${encodeURIComponent(parseDateInput(startStr).toISOString())}&end=${encodeURIComponent(parseDateInput(endStr).toISOString())}`}
+                    className="text-blue-500 hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Download Alarm Data
+                  </a>
+                )}
               </div>
             </div>
           </div>

@@ -79,7 +79,11 @@ function normalizeVolumeMetric(
   metric: any,
   fallbackChannel: string
 ): TankSetupItem["metrics"][0] {
-  const unit = VOLUME_UNITS.includes(metric?.unit as VolumeUnit) ? (metric.unit as VolumeUnit) : "L";
+  const unit = VOLUME_UNITS.includes(metric?.unit as VolumeUnit) 
+    ? (metric.unit as VolumeUnit) 
+    : VOLUME_UNITS.includes(metric?.volumeUnit as VolumeUnit)
+      ? (metric.volumeUnit as VolumeUnit)
+      : "L";
   return {
     channel: String(metric?.channel || metric?.volumeChannel || fallbackChannel).trim(),
     type: "volume",
@@ -91,7 +95,11 @@ function normalizeTemperatureMetric(
   metric: any,
   fallbackChannel: string
 ): TankSetupItem["metrics"][1] {
-  const unit = TEMPERATURE_UNITS.includes(metric?.unit as TemperatureUnit) ? (metric.unit as TemperatureUnit) : "°C";
+  const unit = TEMPERATURE_UNITS.includes(metric?.unit as TemperatureUnit) 
+    ? (metric.unit as TemperatureUnit) 
+    : TEMPERATURE_UNITS.includes(metric?.temperatureUnit as TemperatureUnit)
+      ? (metric.temperatureUnit as TemperatureUnit)
+      : "°C";
   return {
     channel: String(metric?.channel || metric?.temperatureChannel || fallbackChannel).trim(),
     type: "temperature",
@@ -107,7 +115,7 @@ function normalizeTank(
 
   return {
     id: t?.id || `tank-${i + 1}`,
-    name: t?.name?.trim() || `Tank ${i + 1}`,
+    name: (t?.name || (t as any)?.tankName)?.trim() || `Tank ${i + 1}`,
     capacityLiters: clamp(Number(t?.capacityLiters ?? 1000) || 0, 1, 1_000_000),
     variant: "rect",
     fluidColor: typeof t?.fluidColor === "string" && t.fluidColor ? t.fluidColor : undefined,

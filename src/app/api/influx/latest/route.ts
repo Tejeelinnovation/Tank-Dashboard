@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryInflux } from "@/lib/influx";
 import { pool } from "@/lib/postgres";
+import { recordAlarms } from "@/lib/alarmRecording";
 
 const defaultBucket = process.env.INFLUX_BUCKET!;
 
@@ -55,6 +56,11 @@ from(bucket: "${bucket}")
 
     if (disabledChannels.length > 0) {
       rows = rows.filter(r => !disabledChannels.includes(r.channel.trim()));
+    }
+
+    if (slug && rows.length > 0) {
+      // Record alarms in background (no await)
+      recordAlarms(slug, rows).catch(e => console.error("recordAlarms failed:", e));
     }
 
     return NextResponse.json({ rows });

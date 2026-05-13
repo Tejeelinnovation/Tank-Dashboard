@@ -297,6 +297,8 @@ export default function CompanyDashboardPage() {
             temperatureRaw !== undefined
               ? Math.round(temperatureRaw * 10) / 10
               : undefined,
+          companySlug: slug,
+          tankKey: cfg.id.includes("tank-") ? `Tank ${cfg.id.split("-")[1]}` : cfg.id, // Fallback to Tank X format if id is default
         };
       });
 

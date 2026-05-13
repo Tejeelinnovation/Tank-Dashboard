@@ -58,15 +58,22 @@ export async function GET(
     }
 
     const resolution = searchParams.get("res") || "daily";
-    const window = resolution === "time" ? "1h" : "1d";
 
-    const flux = `
+    let flux = `
 from(bucket: "${bucket}")
   |> range(start: time(v: "${start}"), stop: time(v: "${end}"))
   |> filter(fn: (r) => r._measurement == "tank_data")
   |> filter(fn: (r) => r._field == "value")
   |> filter(fn: (r) => r.channel == "${channel}")
-  |> aggregateWindow(every: ${window}, fn: last, createEmpty: true)
+`;
+
+    if (resolution === "daily") {
+      flux += `
+  |> aggregateWindow(every: 1d, fn: last, createEmpty: true)
+`;
+    }
+
+    flux += `
   |> keep(columns: ["_time", "_value", "channel"])
   |> sort(columns: ["_time"])
 `;
