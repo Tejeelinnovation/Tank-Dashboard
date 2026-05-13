@@ -19,6 +19,7 @@ type ChartPoint = {
   date: string;
   value: number | null;
   alarm: boolean;
+  timestamp: number;
 };
 
 /**
@@ -84,6 +85,8 @@ export default function TankHistoryChart({
   liveValue,
   liveLabel,
   color,
+  capacity,
+  xDomain,
 }: {
   data: ChartPoint[];
   metric: TankMetric;
@@ -96,6 +99,10 @@ export default function TankHistoryChart({
   liveLabel?: string;
   /** Custom color for the graph line */
   color?: string;
+  /** Tank capacity for Y-axis scaling */
+  capacity?: number;
+  /** X-axis range [min, max] as timestamps */
+  xDomain?: [number, number];
 }) {
   // Check if dataset is empty
   const isEmpty = !data || data.length === 0;
@@ -107,33 +114,8 @@ export default function TankHistoryChart({
   const hasMetricLimits =
     typeof minLine === "number" || typeof maxLine === "number";
 
-  /**
-   * Normalize data:
-   * - Keeps all dates
-   * - Uses null for missing values (creates gaps in chart)
-   */
-  const normalizedData = React.useMemo(() => {
-    if (!data || data.length === 0) return [];
-    return data.map(p => ({
-      date: p.date,
-      value: p.value,
-      alarm: p.alarm
-    }));
-  }, [data]);
-
-  /**
-   * Prepare chart data:
-   * - Separate normal and alarm segments
-   * - Prevent rendering values when null
-   */
-  const chartData = normalizedData.map((p) => ({
-    ...p,
-    __normal: p.alarm || p.value == null ? null : p.value,
-    __alarmSeg: p.alarm && p.value != null ? p.value : null,
-  }));
-
+  const chartData = data;
   const lineColor = themeColor;
-  const liveLineColor = themeColor;
 
   /**
    * Priority based Y-axis domain:
@@ -142,10 +124,13 @@ export default function TankHistoryChart({
    * 3. Fallback: 0 to 20000
    */
   const yDomain = React.useMemo(() => {
+    if (metric === "volume" && capacity) {
+      return [0, capacity];
+    }
+
     if (hasMetricLimits) {
       const lo = typeof minLine === "number" ? minLine : 0;
       const hi = typeof maxLine === "number" ? maxLine : lo + 20000;
-      // Add slight padding
       return [Math.max(0, lo * 0.9), hi * 1.1];
     }
     
@@ -158,9 +143,31 @@ export default function TankHistoryChart({
       }
     }
 
-    // Default fallbacks
     return metric === "temperature" ? [0, 100] : [0, 20000];
-  }, [data, metric, minLine, maxLine, hasMetricLimits]);
+  }, [data, metric, minLine, maxLine, hasMetricLimits, capacity]);
+
+  // Gradient offsets (0 at top, 1 at bottom)
+  const gradientStops = React.useMemo(() => {
+    const [yMin, yMax] = yDomain;
+    const range = yMax - yMin;
+    if (range <= 0) return null;
+
+    const stops = [];
+    
+    if (typeof maxLine === "number") {
+      const off = (yMax - maxLine) / range;
+      stops.push({ offset: Math.max(0, off), color: "rgba(255,80,80,1)" }); // Above max is red
+      stops.push({ offset: Math.max(0, off), color: lineColor }); // Transition to normal
+    }
+
+    if (typeof minLine === "number") {
+      const off = (yMax - minLine) / range;
+      stops.push({ offset: Math.min(1, off), color: lineColor }); // Normal until min
+      stops.push({ offset: Math.min(1, off), color: "rgba(255,80,80,1)" }); // Below min is red
+    }
+
+    return stops.length > 0 ? stops : null;
+  }, [yDomain, minLine, maxLine, lineColor]);
 
   return (
     <div className="relative h-[220px] w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-3 sm:h-[280px] transition-colors">
@@ -177,23 +184,56 @@ export default function TankHistoryChart({
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
           data={chartData}
-          margin={{ top: 12, right: 12, left: 0, bottom: 8 }}
+          margin={{ top: 12, right: 12, left: 24, bottom: 8 }}
         >
+          <defs>
+            <linearGradient id="lineGradient" x1="0" y1="0" x2="0" y2="1">
+              {gradientStops ? (
+                <>
+                  <stop offset="0" stopColor={typeof maxLine === "number" ? "rgba(255,80,80,1)" : lineColor} />
+                  {gradientStops.map((s, idx) => (
+                    <stop key={idx} offset={s.offset} stopColor={s.color} />
+                  ))}
+                  <stop offset="1" stopColor={typeof minLine === "number" ? "rgba(255,80,80,1)" : lineColor} />
+                </>
+              ) : (
+                <>
+                  <stop offset="0" stopColor={lineColor} />
+                  <stop offset="1" stopColor={lineColor} />
+                </>
+              )}
+            </linearGradient>
+          </defs>
+
           {/* Grid */}
           <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
 
-          {/* X Axis (dates) */}
+          {/* X Axis (numeric timestamps) */}
           <XAxis
-            dataKey="date"
+            dataKey="timestamp"
+            type="number"
+            domain={xDomain || ['auto', 'auto']}
             tick={{ fill: "currentColor", fontSize: 11, opacity: 0.55 }}
-            minTickGap={18}
+            tickFormatter={(t) => {
+              const d = new Date(t);
+              const isToday = new Date().toDateString() === d.toDateString();
+              
+              // If the domain is small (less than 24 hours), show only time
+              if (xDomain && (xDomain[1] - xDomain[0]) < 86400000) {
+                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              }
+              
+              // Otherwise show date
+              return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            }}
+            minTickGap={30}
             className="text-black dark:text-white"
           />
 
           {/* Y Axis with dynamic domain */}
           <YAxis
             tick={{ fill: "currentColor", fontSize: 11, opacity: 0.55 }}
-            width={42}
+            width={70}
             domain={yDomain}
             className="text-black dark:text-white"
           />
@@ -222,6 +262,14 @@ export default function TankHistoryChart({
               y={minLine}
               stroke="rgba(255,80,80,0.85)"
               strokeDasharray="4 4"
+              strokeWidth={1.5}
+              label={{
+                value: `Min: ${minLine}`,
+                position: 'insideBottomLeft',
+                fill: 'rgba(255,80,80,0.85)',
+                fontSize: 10,
+                offset: 5
+              }}
             />
           )}
 
@@ -231,29 +279,28 @@ export default function TankHistoryChart({
               y={maxLine}
               stroke="rgba(255,80,80,0.85)"
               strokeDasharray="4 4"
-            />
-          )}
-
-          {/* Live value reference line */}
-          {typeof liveValue === "number" && Number.isFinite(liveValue) && (
-            <ReferenceLine
-              y={liveValue}
-              stroke={liveLineColor}
-              strokeDasharray="6 3"
               strokeWidth={1.5}
-              ifOverflow="extendDomain"
+              label={{
+                value: `Max: ${maxLine}`,
+                position: 'insideTopLeft',
+                fill: 'rgba(255,80,80,0.85)',
+                fontSize: 10,
+                offset: 5
+              }}
             />
           )}
 
-          {/* Normal data line (hidden if value is null) */}
+          {/* Alarm limits (red dotted lines) */}
+
+          {/* Single continuous line with conditional color gradient */}
           <Line
             type="monotone"
-            dataKey="__normal"
-            stroke={lineColor}
+            dataKey="value"
+            stroke="url(#lineGradient)"
             strokeWidth={3}
             dot={false}
             activeDot={{ r: 5, strokeWidth: 0, fill: themeColor }}
-            connectNulls={false} // ensures gaps appear
+            connectNulls={false} 
           />
           
           {/* Terminal Live Point Dot */}
@@ -272,16 +319,6 @@ export default function TankHistoryChart({
               }}
             />
           )}
-
-          {/* Alarm segment line */}
-          <Line
-            type="monotone"
-            dataKey="__alarmSeg"
-            stroke="rgba(255,80,80,0.96)"
-            strokeWidth={3}
-            dot={false}
-            connectNulls={false}
-          />
         </LineChart>
       </ResponsiveContainer>
     </div>

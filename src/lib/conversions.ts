@@ -25,8 +25,8 @@ export type MetricMode = "default" | "percent" | "inverted";
  * inverted: liters = ((100 - raw) / 100) * capacityLiters
  */
 export function convertMaToLiters(
-  value: number, 
-  capacityLiters: number, 
+  value: number,
+  capacityLiters: number,
   mode: MetricMode = "default"
 ): number {
   if (mode === "percent") {
@@ -114,13 +114,13 @@ export function convertFtoC(f: number): number {
  */
 export function convertTemperature(value: number, from: TemperatureUnit, to: TemperatureUnit): number {
   if (from === to) return value;
-  
+
   const fromNorm = (from === "°C" || from === "C") ? "°C" : "°F";
   const toNorm = (to === "°C" || to === "C") ? "°C" : "°F";
 
   if (fromNorm === toNorm) return value;
   if (fromNorm === "°C" && toNorm === "°F") return convertCtoF(value);
   if (fromNorm === "°F" && toNorm === "°C") return convertFtoC(value);
-  
+
   return value;
 }

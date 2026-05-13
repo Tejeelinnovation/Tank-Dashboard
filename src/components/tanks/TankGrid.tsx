@@ -30,6 +30,8 @@ export type Tank = {
   volumeC?: number;
   temperatureM?: number;
   temperatureC_factor?: number;
+  companySlug?: string;
+  tankKey?: string;
 };
 
 type TankGridProps = {
