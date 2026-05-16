@@ -4,6 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/postgres";
 import { getCompanySessionId } from "@/lib/companyAuth";
 import { isAdminLoggedIn } from "@/lib/auth";
+import { verifyJWT } from "@/lib/jwt";
+import { AUTH_COOKIE_NAME } from "@/lib/constants";
+import { getUserPermissions } from "@/lib/dbUsers";
+import { cookies } from "next/headers";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -63,6 +67,12 @@ export async function GET(req: NextRequest) {
   try {
     const adminLoggedIn = await isAdminLoggedIn();
     const resolved = await resolveCompanyId(req);
+
+    const cookieStore = await cookies();
+    const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+    const session = token ? await verifyJWT(token) : null;
+    const isSubUser = session?.role === "user";
+    const userId = session?.userId;
 
     if (!resolved.companyId) {
       return NextResponse.json(
@@ -145,6 +155,7 @@ export async function GET(req: NextRequest) {
       volumeC: row.volume_c != null ? Number(row.volume_c) : 0.0,
       temperatureM: row.temperature_m != null ? Number(row.temperature_m) : 1.0,
       temperatureC_factor: row.temperature_c != null ? Number(row.temperature_c) : 0.0, // using temperatureC_factor to avoid confusion with current temp
+      isDisabled: !!row.is_disabled,
     }));
 
     const alarmsRes = await pool.query(
@@ -176,11 +187,33 @@ export async function GET(req: NextRequest) {
       };
     }
 
+    let userPermissions = null;
+    if (isSubUser && userId) {
+      userPermissions = await getUserPermissions(userId);
+    }
+
+    let filteredTanks = isSubUser ? [] : tanks;
+    let filteredAlarms = isSubUser ? {} : alarms;
+
+    if (isSubUser && userPermissions) {
+      const allowedKeys = new Set(userPermissions.map(p => String(p.tankKey).trim().toLowerCase()));
+      filteredTanks = tanks.filter(t => allowedKeys.has(String(t.tankKey).trim().toLowerCase()));
+      
+      filteredAlarms = {};
+      for (const key in alarms) {
+        if (allowedKeys.has(key.trim().toLowerCase())) {
+          filteredAlarms[key] = alarms[key];
+        }
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       company,
-      tanks,
-      alarms,
+      tanks: filteredTanks,
+      alarms: filteredAlarms,
+      userPermissions,
+      role: session?.role || null,
     });
   } catch (error) {
     console.error("Load company settings error:", error);
@@ -197,6 +230,19 @@ export async function POST(req: NextRequest) {
   try {
     const adminLoggedIn = await isAdminLoggedIn();
     const body = await req.json();
+    
+    const cookieStore = await cookies();
+    const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+    const session = token ? await verifyJWT(token) : null;
+
+    if (session?.role === "user") {
+      // For now, sub-users are not allowed to change global settings or add/remove tanks.
+      // If the user wants granular per-tank editing, we can implement that.
+      // But usually 'edit' access means editing specific tank names/capacities in the dashboard,
+      // not the whole company configuration.
+      return NextResponse.json({ ok: false, error: "Sub-users cannot update company settings" }, { status: 403 });
+    }
+
     const resolved = await resolveCompanyId(req, body);
 
     if (!resolved.companyId) {
@@ -291,6 +337,12 @@ export async function POST(req: NextRequest) {
 
       const disableVolume = !!tank?.disableVolume;
       const disableTemperature = !!tank?.disableTemperature;
+      const is_disabled = !!tank?.isDisabled;
+
+      // Ensure column exists
+      await client.query(`
+        ALTER TABLE company_tank_settings ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE;
+      `);
 
       await client.query(
         `
@@ -317,9 +369,33 @@ export async function POST(req: NextRequest) {
           volume_c,
           temperature_m,
           temperature_c,
+          is_disabled,
           updated_at
         )
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,now())
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,now())
+        on conflict (company_id, tank_key) do update set
+          tank_name = excluded.tank_name,
+          volume_channel = excluded.volume_channel,
+          temperature_channel = excluded.temperature_channel,
+          capacity_liters = excluded.capacity_liters,
+          volume_unit = excluded.volume_unit,
+          temperature_unit = excluded.temperature_unit,
+          fluid_color = excluded.fluid_color,
+          temp_color = excluded.temp_color,
+          volume_min = excluded.volume_min,
+          volume_max = excluded.volume_max,
+          temperature_min = excluded.temperature_min,
+          temperature_max = excluded.temperature_max,
+          disable_volume = excluded.disable_volume,
+          disable_temperature = excluded.disable_temperature,
+          volume_mode = excluded.volume_mode,
+          temperature_mode = excluded.temperature_mode,
+          volume_m = excluded.volume_m,
+          volume_c = excluded.volume_c,
+          temperature_m = excluded.temperature_m,
+          temperature_c = excluded.temperature_c,
+          is_disabled = excluded.is_disabled,
+          updated_at = now()
         `,
         [
           companyId,
@@ -343,7 +419,8 @@ export async function POST(req: NextRequest) {
           tank?.volumeM != null ? Number(tank.volumeM) : 1.0,
           tank?.volumeC != null ? Number(tank.volumeC) : 0.0,
           tank?.temperatureM != null ? Number(tank.temperatureM) : 1.0,
-          tank?.temperatureC_factor != null ? Number(tank.temperatureC_factor) : 0.0
+          tank?.temperatureC_factor != null ? Number(tank.temperatureC_factor) : 0.0,
+          is_disabled
         ]
       );
     }
@@ -379,6 +456,14 @@ export async function POST(req: NextRequest) {
         ]
       );
     }
+
+    // Cleanup: Remove tanks that are no longer in the configuration
+    const validKeys = Array.from({ length: tanksCount }, (_, i) => `Tank ${i + 1}`);
+    await client.query(
+      `delete from company_tank_settings 
+       where company_id = $1 and tank_key not in (select unnest($2::text[]))`,
+      [companyId, validKeys]
+    );
 
     await client.query("COMMIT");
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useVisibilityPolling } from "@/lib/useVisibilityPolling";
 import TankGrid, { type Tank, type AlarmEvent } from "@/components/tanks/TankGrid";
+import AlarmHistory from "@/components/alarms/AlarmHistory";
 import type { TankAlarmLimits } from "@/types/alarm";
 import TopHero from "@/components/ui/TopHero";
 import BackgroundFX from "@/components/ui/BackgroundFX";
@@ -32,6 +33,7 @@ type TankSetupItem = {
   volumeC?: number;
   temperatureM?: number;
   temperatureC_factor?: number;
+  isDisabled?: boolean;
   metrics: [
     { channel: string; type: "volume"; unit: VolumeUnit },
     { channel: string; type: "temperature"; unit: TemperatureUnit }
@@ -100,10 +102,13 @@ export default function CompanyDashboardPage() {
   }>({ name: "", logoUrl: "" });
 
   const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [alarms, setAlarms] = useState<AlarmEvent[]>([]);
   const [openTankId, setOpenTankId] = useState<string | null>(null);
   const [alarmMap, setAlarmMap] = useState<Record<string, TankAlarmLimits>>({});
+  const [userPermissions, setUserPermissions] = useState<{ tankKey: string; accessLevel: "view" | "edit" }[] | null>(null);
+  const [sessionRole, setSessionRole] = useState<string | null>(null);
 
   const modalTank = useMemo(() => {
     if (!openTankId) return null;
@@ -122,7 +127,7 @@ export default function CompanyDashboardPage() {
       const settingsJson = await settingsRes.json().catch(() => ({}));
 
       if (!settingsRes.ok || !settingsJson?.ok) {
-        setLoading(false);
+        setInitialLoading(false);
         return;
       }
 
@@ -138,56 +143,92 @@ export default function CompanyDashboardPage() {
         influxBucket: company.influxBucket,
       });
 
-      const normalizedSetup: TankSetupItem[] = Array.from(
-        { length: tanksCount },
-        (_, i) => {
-          const row = settingsRows[i];
+      const isSubUser = settingsJson?.role === "user";
 
-          if (!row) {
+      const normalizedSetup: TankSetupItem[] = isSubUser
+        ? settingsRows.map((row: any, i: number) => ({
+          id: String(row.tankKey || row.id || `tank-${i + 1}`),
+          name: String(row.tankName || row.name || row.tankKey || `Tank ${i + 1}`).trim(),
+          capacityLiters: Number(row.capacityLiters) || Number(tankCapacities[i]) || 1000,
+          variant: "rect",
+          fluidColor: row.fluidColor || row.fluid_color,
+          tempColor: row.tempColor || row.temp_color,
+          disableVolume: !!(row.disableVolume ?? row.disable_volume),
+          disableTemperature: !!(row.disableTemperature ?? row.disable_temperature),
+          volumeMode: row.volumeMode || row.volume_mode || "default",
+          temperatureMode: row.temperatureMode || row.temperature_mode || "default",
+          volumeM: row.volumeM ?? row.volume_m ?? 1.0,
+          volumeC: row.volumeC ?? row.volume_c ?? 0.0,
+          temperatureM: row.temperatureM ?? row.temperature_m ?? 1.0,
+          temperatureC_factor: row.temperatureC_factor ?? row.temperature_c ?? 0.0,
+          isDisabled: !!(row.isDisabled ?? row.is_disabled),
+          metrics: [
+            {
+              channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(),
+              type: "volume",
+              unit: normalizeVolumeUnit(row.volumeUnit),
+            },
+            {
+              channel: String(row.temperatureChannel ?? `CH${i * 2 + 2}`).trim(),
+              type: "temperature",
+              unit: normalizeTemperatureUnit(row.temperatureUnit),
+            },
+          ],
+        }))
+        : Array.from(
+          { length: tanksCount },
+          (_, i) => {
+            const row = settingsRows[i];
+
+            if (!row) {
+              return {
+                ...makeDefaultTank(i),
+                capacityLiters: Number(tankCapacities[i]) || 1000,
+              };
+            }
+
             return {
-              ...makeDefaultTank(i),
-              capacityLiters: Number(tankCapacities[i]) || 1000,
+              id: String(row.tankKey || row.id || `tank-${i + 1}`),
+              name: String(row.tankName || row.name || row.tankKey || `Tank ${i + 1}`).trim(),
+              capacityLiters:
+                Number(row.capacityLiters) || Number(tankCapacities[i]) || 1000,
+              variant: "rect",
+              fluidColor: row.fluidColor || row.fluid_color,
+              tempColor: row.tempColor || row.temp_color,
+              disableVolume: !!(row.disableVolume ?? row.disable_volume),
+              disableTemperature: !!(row.disableTemperature ?? row.disable_temperature),
+              volumeMode: row.volumeMode || row.volume_mode || "default",
+              temperatureMode: row.temperatureMode || row.temperature_mode || "default",
+              volumeM: row.volumeM ?? row.volume_m ?? 1.0,
+              volumeC: row.volumeC ?? row.volume_c ?? 0.0,
+              temperatureM: row.temperatureM ?? row.temperature_m ?? 1.0,
+              temperatureC_factor: row.temperatureC_factor ?? row.temperature_c ?? 0.0,
+              isDisabled: !!(row.isDisabled ?? row.is_disabled),
+              metrics: [
+                {
+                  channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(),
+                  type: "volume",
+                  unit: normalizeVolumeUnit(row.volumeUnit),
+                },
+                {
+                  channel: String(row.temperatureChannel ?? `CH${i * 2 + 2}`).trim(),
+                  type: "temperature",
+                  unit: normalizeTemperatureUnit(row.temperatureUnit),
+                },
+              ],
             };
           }
-
-          return {
-            id: String(row.id || row.tankKey || `tank-${i + 1}`),
-            name: String(row.tankName || row.name || `Tank ${i + 1}`).trim(),
-            capacityLiters:
-              Number(row.capacityLiters) || Number(tankCapacities[i]) || 1000,
-            variant: "rect",
-            fluidColor: row.fluidColor || row.fluid_color,
-            tempColor: row.tempColor || row.temp_color,
-            disableVolume: !!(row.disableVolume ?? row.disable_volume),
-            disableTemperature: !!(row.disableTemperature ?? row.disable_temperature),
-            volumeMode: row.volumeMode || row.volume_mode || "default",
-            temperatureMode: row.temperatureMode || row.temperature_mode || "default",
-            volumeM: row.volumeM ?? row.volume_m ?? 1.0,
-            volumeC: row.volumeC ?? row.volume_c ?? 0.0,
-            temperatureM: row.temperatureM ?? row.temperature_m ?? 1.0,
-            temperatureC_factor: row.temperatureC_factor ?? row.temperature_c ?? 0.0,
-            metrics: [
-              {
-                channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(),
-                type: "volume",
-                unit: normalizeVolumeUnit(row.volumeUnit),
-              },
-              {
-                channel: String(row.temperatureChannel ?? `CH${i * 2 + 2}`).trim(),
-                type: "temperature",
-                unit: normalizeTemperatureUnit(row.temperatureUnit),
-              },
-            ],
-          };
-        }
-      );
+        );
 
       setSetupTanks(normalizedSetup);
       setAlarmMap(settingsJson?.alarms || {});
+      setUserPermissions(settingsJson?.userPermissions || null);
+      setSessionRole(settingsJson?.role || null);
+      setInitialLoading(false);
     } catch (e) {
       console.error("Failed to load settings", e);
       setErr("Failed to load company settings");
-      setLoading(false);
+      setInitialLoading(false);
     }
   }, [slug]);
 
@@ -206,6 +247,7 @@ export default function CompanyDashboardPage() {
       const url = new URL("/api/influx/latest", window.location.origin);
       url.searchParams.set("org", influxOrg);
       url.searchParams.set("bucket", influxBucket);
+      url.searchParams.set("slug", slug);
 
       const influxRes = await fetch(url.toString(), { cache: "no-store" });
       const influxJson = await influxRes.json().catch(() => ({}));
@@ -231,7 +273,7 @@ export default function CompanyDashboardPage() {
         const volumeRaw = cfg.disableVolume ? undefined : toNumber(volumeRow?._value);
         let volumeLiters =
           volumeRaw !== undefined ? convertMaToLiters(volumeRaw, cfg.capacityLiters, cfg.volumeMode) : 0;
-        
+
         // Apply calibration Y = MX + C
         if (volumeLiters !== undefined) {
           volumeLiters = (volumeLiters * (cfg.volumeM ?? 1.0)) + (cfg.volumeC ?? 0.0);
@@ -292,6 +334,7 @@ export default function CompanyDashboardPage() {
           tempColor: cfg.tempColor,
           disableVolume: cfg.disableVolume,
           disableTemperature: cfg.disableTemperature,
+          isDisabled: cfg.isDisabled,
           volumeValue: Math.round(volumeValue * 100) / 100,
           temperatureValue:
             temperatureRaw !== undefined
@@ -333,104 +376,106 @@ export default function CompanyDashboardPage() {
     return () => clearTimeout(timer);
   }, [err]);
 
+  if (initialLoading) {
+    return (
+      <main className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 rounded-full border-4 border-white/10 border-t-white animate-spin" />
+          <div className="text-white/40 text-sm font-medium tracking-widest uppercase">Loading Dashboard</div>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="relative min-h-screen overflow-hidden text-black transition-colors duration-300 dark:text-white">
+    <main className="min-h-screen bg-[#0a0a0a] text-white selection:bg-white/10">
       <BackgroundFX />
 
       <div className="relative">
         <TopHero
           brand="Ekatva"
-          logoUrl={companyBranding.logoUrl}
-          companyName={companyBranding.name}
           hideViewTanks
-          eyebrow="COMPANY DASHBOARD"
-          titleLine1=""
-          titleLine2=""
-          subtitle="Live values from InfluxDB using fixed volume and temperature channels configured by the admin."
           navItems={[
-            { label: "Setup", href: `/company/${slug}/setup` },
+            ...(sessionRole === "admin" || sessionRole === "company" || (userPermissions && userPermissions.some(p => p.accessLevel === "edit")) ? [{ label: "Setup", href: `/company/${slug}/setup` }] : []),
             { label: "Dashboard", href: `/company/${slug}/dashboard` },
             { label: "About", href: "https://ekatvatechnovation.com/" },
           ]}
         />
 
-        <section id="tanks" className="mx-auto max-w-6xl px-6 pb-20 pt-10">
+        <section id="tanks" className="mx-auto max-w-[1400px] px-6 pb-20 pt-6">
           {err ? (
             <div className="mb-6 rounded-xl border border-red-500/30 bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">
               {err}
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-            <div className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 lg:col-span-2">
-              <div className="mb-6 flex items-end justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="truncate text-xl font-semibold text-black dark:text-white md:text-2xl">
-                    Live Tanks
-                  </h2>
-                  <p className="mt-1 text-sm text-black/60 dark:text-white/55">
-                    Showing current configured volume and temperature channels from InfluxDB.
-                  </p>
+          <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] items-start gap-8">
+            {/* Sidebar Left: Branding + Alarms */}
+            <div className="space-y-6 lg:sticky lg:top-6">
+              {/* Company Branding */}
+              <div className="rounded-3xl border border-black/10 bg-white/70 p-8 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+                <div className="flex flex-col items-center text-center">
+                  {companyBranding.logoUrl ? (
+                    <img src={companyBranding.logoUrl} alt={companyBranding.name} className="h-20 w-auto object-contain mb-4" />
+                  ) : null}
+                  <h1 className="text-2xl font-bold text-black dark:text-white">{companyBranding.name}</h1>
+                  <div className="mt-2 text-[10px] uppercase tracking-[0.2em] opacity-50">Industrial Monitoring</div>
+                </div>
+              </div>
+
+              {/* Active Alarms */}
+              <div className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+                <div className="mb-6">
+                  <h2 className="text-lg font-semibold text-black dark:text-white md:text-xl">Active Alarms</h2>
+                  <p className="mt-1 text-sm text-black/60 dark:text-white/55">Latest notifications.</p>
                 </div>
 
-                <div className="text-xs text-black/50 dark:text-white/50">
-                  {loading ? "Loading…" : "Updated every 10s"}
+                {alarms.length > 0 ? (
+                  <div className="rounded-2xl border border-red-500/25 bg-red-50 p-4 backdrop-blur-xl dark:bg-red-500/10">
+                    <div className="space-y-3 text-xs text-black/70 dark:text-white/70">
+                      {alarms.map((a, i) => (
+                        <div key={`${a.tankId}-${i}`} className="flex flex-col gap-1 border-b border-black/10 pb-3 last:border-b-0 last:pb-0 dark:border-white/10">
+                          <div className="text-black/90 dark:text-white/90">
+                            <span className="font-semibold">{a.tankName}</span>{" "}
+                            <span className="text-red-600 dark:text-red-300">— {a.reason}</span>
+                          </div>
+                          <div className="text-black/55 dark:text-white/55">
+                            Value: {typeof a.volumeL === "number" ? a.volumeL.toFixed(4) : "--"} •
+                            Temp: {typeof a.temperatureC === "number" ? `${a.temperatureC.toFixed(2)}°C` : "--"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-black/10 bg-white/50 p-6 text-center text-sm text-black/55 dark:border-white/10 dark:bg-white/5 dark:text-white/55">
+                    No active alarms.
+                  </div>
+                )}
+              </div>
+
+              {/* Alarm History */}
+              <AlarmHistory slug={slug} />
+            </div>
+
+            {/* Main Content: Live Tanks */}
+            <div className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 min-w-0 overflow-hidden">
+              <div className="mb-6 flex items-end justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="truncate text-xl font-semibold text-black dark:text-white md:text-2xl">Live Tanks</h2>
+                  <p className="mt-1 text-sm text-black/60 dark:text-white/55">Real-time status from InfluxDB channels.</p>
                 </div>
+                <div className="text-xs text-black/50 dark:text-white/50">{loading ? "Loading…" : "Updated every 10s"}</div>
               </div>
 
               <TankGrid
                 tanks={tanks}
                 loading={loading}
                 alarmMap={alarmMap}
+                userPermissions={userPermissions}
                 onAlarmList={setAlarms}
                 onOpenTank={(t) => setOpenTankId(String(t.id))}
               />
-            </div>
-
-            <div className="sticky top-6 rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 lg:col-span-1">
-              <div className="mb-6 flex items-end justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-black dark:text-white md:text-xl">
-                    Active Alarms
-                  </h2>
-                  <p className="mt-1 text-sm text-black/60 dark:text-white/55">
-                    Latest notifications.
-                  </p>
-                </div>
-              </div>
-
-              {alarms.length > 0 ? (
-                <div className="rounded-2xl border border-red-500/25 bg-red-50 p-4 backdrop-blur-xl dark:bg-red-500/10">
-                  <div className="space-y-3 text-xs text-black/70 dark:text-white/70">
-                    {alarms.map((a, i) => (
-                      <div
-                        key={`${a.tankId}-${i}`}
-                        className="flex flex-col gap-1 border-b border-black/10 pb-3 last:border-b-0 last:pb-0 dark:border-white/10"
-                      >
-                        <div className="text-black/90 dark:text-white/90">
-                          <span className="font-semibold">{a.tankName}</span>{" "}
-                          <span className="text-red-600 dark:text-red-300">
-                            — {a.reason}
-                          </span>
-                        </div>
-
-                        <div className="text-black/55 dark:text-white/55">
-                          Value:{" "}
-                          {typeof a.volumeL === "number" ? `${a.volumeL}` : "--"} •
-                          Temp:{" "}
-                          {typeof a.temperatureC === "number"
-                            ? `${a.temperatureC}°C`
-                            : "--"}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-black/10 bg-white/50 p-6 text-center text-sm text-black/55 dark:border-white/10 dark:bg-white/5 dark:text-white/55">
-                  No active alarms.
-                </div>
-              )}
             </div>
           </div>
         </section>

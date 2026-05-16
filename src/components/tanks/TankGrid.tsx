@@ -32,6 +32,7 @@ export type Tank = {
   temperatureC_factor?: number;
   companySlug?: string;
   tankKey?: string;
+  isDisabled?: boolean;
 };
 
 type TankGridProps = {
@@ -43,6 +44,7 @@ type TankGridProps = {
   onOpenTank?: (tank: Tank) => void;
   onAlarmList?: (events: AlarmEvent[]) => void;
   alarmMap?: Record<string, TankAlarmLimits>;
+  userPermissions?: { tankKey: string; accessLevel: "view" | "edit" }[] | null;
 };
 
 export type AlarmEvent = {
@@ -79,9 +81,19 @@ export default function TankGrid({
   onOpenTank,
   onAlarmList,
   alarmMap = {},
+  userPermissions = null,
 }: TankGridProps) {
   const normalizedTanks = React.useMemo(() => {
-    return tanks.map((tank, idx) => {
+    let filtered = tanks;
+    if (userPermissions) {
+      const allowedKeys = new Set(userPermissions.map(p => String(p.tankKey).trim().toLowerCase()));
+      filtered = tanks.filter(t => {
+        const key = String(t.tankKey || t.id).trim().toLowerCase();
+        return allowedKeys.has(key);
+      });
+    }
+
+    return filtered.map((tank, idx) => {
       const id = String(tank.id ?? `T${idx + 1}`);
       const name = String(tank.name ?? `Tank ${idx + 1}`);
 
@@ -107,12 +119,13 @@ export default function TankGrid({
         hasData: tank.hasData,
       } as Tank;
     });
-  }, [tanks]);
+  }, [tanks, userPermissions]);
 
   const alarmEvents = React.useMemo(() => {
     const events: AlarmEvent[] = [];
 
     for (const t of normalizedTanks) {
+      if (t.isDisabled) continue;
       const limits = pickLimits(alarmMap, t);
       const reasons = getAlarmReasons(t, limits);
 
@@ -169,7 +182,7 @@ export default function TankGrid({
     );
   }
 
-  if (!tanks || tanks.length === 0) {
+  if (!normalizedTanks || normalizedTanks.length === 0) {
     return (
       <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-8 text-center text-black/60 dark:text-white/60 transition-colors">
         {emptyText}
@@ -185,7 +198,12 @@ export default function TankGrid({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2">
+      <div
+        className={`grid w-full gap-6 ${normalizedTanks.length === 1
+            ? "grid-cols-1 max-w-xl"
+            : "grid-cols-1 xl:grid-cols-2"
+          }`}
+      >
         {normalizedTanks.map((tank) => {
           const limits = pickLimits(alarmMap, tank);
           const levelPercent = normalizeLevelPercent(tank);
@@ -193,28 +211,32 @@ export default function TankGrid({
           const alarmActive = alarmReasons.length > 0;
 
           return (
-            <TankCard
-              key={tank.id}
-              id={tank.id}
-              name={tank.name}
-              level={levelPercent}
-              temperatureC={tank.temperatureC}
-              capacityLiters={tank.capacityLiters}
-              variant="rect"
-              limits={limits}
-              volumeValue={tank.volumeValue}
-              volumeUnit={tank.volumeUnit}
-              temperatureValue={tank.temperatureValue}
-              temperatureUnit={tank.temperatureUnit}
-              alarmActive={alarmActive}
-              alarmLabel={alarmActive ? alarmReasons.join(", ") : "Within limits"}
-              hasData={tank.hasData}
-              fluidColor={tank.fluidColor}
-              tempColor={tank.tempColor}
-              disableVolume={tank.disableVolume}
-              disableTemperature={tank.disableTemperature}
-              onOpen={onOpenTank ? () => onOpenTank(tank) : undefined}
-            />
+            <div key={tank.id} className="w-full min-w-0">
+              <TankCard
+                id={tank.id}
+                name={tank.name}
+                level={levelPercent}
+                temperatureC={tank.temperatureC}
+                capacityLiters={tank.capacityLiters}
+                variant="rect"
+                limits={limits}
+                volumeValue={tank.volumeValue}
+                volumeUnit={tank.volumeUnit}
+                temperatureValue={tank.temperatureValue}
+                temperatureUnit={tank.temperatureUnit}
+                alarmActive={alarmActive}
+                alarmLabel={alarmActive ? alarmReasons.join(", ") : "Within limits"}
+                hasData={tank.hasData}
+                fluidColor={tank.fluidColor}
+                tempColor={tank.tempColor}
+                disableVolume={tank.disableVolume}
+                disableTemperature={tank.disableTemperature}
+                isDisabled={tank.isDisabled}
+                onOpen={
+                  onOpenTank ? () => onOpenTank(tank) : undefined
+                }
+              />
+            </div>
           );
         })}
       </div>

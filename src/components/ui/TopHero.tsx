@@ -56,10 +56,10 @@ export default function TopHero({
   ],
   ctaLabel = "Logout",
   onCtaClickHref = "/login",
-  eyebrow = "INDUSTRIAL MONITORING DASHBOARD",
-  titleLine1 = "Tank",
-  titleLine2 = "Control",
-  subtitle = "Real-time liquid levels with smooth animations and role-based control.",
+  eyebrow = "",
+  titleLine1 = "",
+  titleLine2 = "",
+  subtitle = "",
   hideCta = false,
   hideViewTanks = true,
   titleSize = "large",
@@ -84,8 +84,8 @@ export default function TopHero({
   }, []);
 
   const handleLogout = async () => {
-    await fetch("/api/company/logout", { method: "POST" }).catch(() => {});
-    await fetch("/api/admin/logout", { method: "POST" }).catch(() => {});
+    await fetch("/api/company/logout", { method: "POST" }).catch(() => { });
+    await fetch("/api/admin/logout", { method: "POST" }).catch(() => { });
     window.location.href = "/login";
   };
 
@@ -121,7 +121,7 @@ export default function TopHero({
 
           <div className="flex items-center justify-end gap-3">
             <ThemeToggle />
-            
+
             {!hideCta &&
               (ctaLabel === "Logout" ? (
                 <button
@@ -172,23 +172,21 @@ export default function TopHero({
               </div>
             )
           )}
-          
+
           <div className="text-[10px] md:text-xs uppercase tracking-[0.28em] text-black/55 dark:text-white/55">
             {eyebrow}
           </div>
 
           <h1 className="mt-5 leading-[0.9]">
             <span
-              className={`block font-semibold text-black dark:text-white ${
-                titleSize === "small" ? "text-5xl md:text-7xl" : "text-6xl md:text-8xl"
-              }`}
+              className={`block font-semibold text-black dark:text-white ${titleSize === "small" ? "text-5xl md:text-7xl" : "text-6xl md:text-8xl"
+                }`}
             >
               {titleLine1}
             </span>
             <span
-              className={`block font-semibold text-black/55 dark:text-white/55 ${
-                titleSize === "small" ? "text-5xl md:text-7xl" : "text-6xl md:text-8xl"
-              }`}
+              className={`block font-semibold text-black/55 dark:text-white/55 ${titleSize === "small" ? "text-5xl md:text-7xl" : "text-6xl md:text-8xl"
+                }`}
             >
               {titleLine2}
             </span>

@@ -1,44 +1,23 @@
-import { cookies, headers } from "next/headers";
-
-export const COOKIE_NAME = "admin_session";
+import { cookies } from "next/headers";
+import { verifyJWT } from "./jwt";
+import { AUTH_COOKIE_NAME } from "@/lib/constants";
 
 export async function isAdminLoggedIn() {
   try {
     const store = await cookies();
-    const token = store.get(COOKIE_NAME);
-    if (token?.value === "true") return true;
+    const token = store.get(AUTH_COOKIE_NAME)?.value;
+    if (!token) return false;
 
-    // Fallback: check headers directly
-    const heads = await headers();
-    const cookieHeader = heads.get("cookie") || "";
-    if (cookieHeader.includes(`${COOKIE_NAME}=true`)) {
-      return true;
-    }
-    
-    console.log(`[auth] admin session check failed. cookie: ${token?.value}, header: ${cookieHeader ? "present" : "missing"}`);
-    return false;
+    const payload = await verifyJWT(token);
+    return payload?.role === "admin";
   } catch (err) {
-    console.error(`[auth] error checking admin session:`, err);
     return false;
   }
 }
 
-export async function setAdminSession() {
-  const store = await cookies();
-  store.set(COOKIE_NAME, "true", {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    secure: process.env.NODE_ENV === "production",
-  });
-}
-
 export async function clearAdminSession() {
   const store = await cookies();
-  store.set(COOKIE_NAME, "", {
-    path: "/",
-    maxAge: 0,
-  });
+  store.delete(AUTH_COOKIE_NAME);
 }
 
 export function getAdminLoginId() {
