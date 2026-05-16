@@ -6,9 +6,9 @@ import BackgroundFX from "@/components/ui/BackgroundFX";
 import TopHero from "@/components/ui/TopHero";
 import PasswordInput from "@/components/ui/PasswordInput";
 import type { AlarmMap, TankAlarmLimits } from "@/types/alarm";
-import { 
-  type VolumeUnit, 
-  type TemperatureUnit, 
+import {
+  type VolumeUnit,
+  type TemperatureUnit,
   type MetricMode,
 } from "@/lib/conversions";
 
@@ -33,8 +33,9 @@ type TankSetupItem = {
   temperatureC_factor?: number;
   metrics: [
     { channel: string; type: "volume"; unit: VolumeUnit },
-    { channel: string; type: "temperature"; unit: TemperatureUnit }
+    { channel: string; type: "temperature"; unit: TemperatureUnit },
   ];
+  isDisabled?: boolean;
 };
 
 const FLUID_COLOR_SWATCHES = [
@@ -77,15 +78,17 @@ function makeDefaultTank(i: number): TankSetupItem {
 
 function normalizeVolumeMetric(
   metric: any,
-  fallbackChannel: string
+  fallbackChannel: string,
 ): TankSetupItem["metrics"][0] {
-  const unit = VOLUME_UNITS.includes(metric?.unit as VolumeUnit) 
-    ? (metric.unit as VolumeUnit) 
+  const unit = VOLUME_UNITS.includes(metric?.unit as VolumeUnit)
+    ? (metric.unit as VolumeUnit)
     : VOLUME_UNITS.includes(metric?.volumeUnit as VolumeUnit)
       ? (metric.volumeUnit as VolumeUnit)
       : "L";
   return {
-    channel: String(metric?.channel || metric?.volumeChannel || fallbackChannel).trim(),
+    channel: String(
+      metric?.channel || metric?.volumeChannel || fallbackChannel,
+    ).trim(),
     type: "volume",
     unit,
   };
@@ -93,15 +96,17 @@ function normalizeVolumeMetric(
 
 function normalizeTemperatureMetric(
   metric: any,
-  fallbackChannel: string
+  fallbackChannel: string,
 ): TankSetupItem["metrics"][1] {
-  const unit = TEMPERATURE_UNITS.includes(metric?.unit as TemperatureUnit) 
-    ? (metric.unit as TemperatureUnit) 
+  const unit = TEMPERATURE_UNITS.includes(metric?.unit as TemperatureUnit)
+    ? (metric.unit as TemperatureUnit)
     : TEMPERATURE_UNITS.includes(metric?.temperatureUnit as TemperatureUnit)
       ? (metric.temperatureUnit as TemperatureUnit)
       : "°C";
   return {
-    channel: String(metric?.channel || metric?.temperatureChannel || fallbackChannel).trim(),
+    channel: String(
+      metric?.channel || metric?.temperatureChannel || fallbackChannel,
+    ).trim(),
     type: "temperature",
     unit,
   };
@@ -109,7 +114,7 @@ function normalizeTemperatureMetric(
 
 function normalizeTank(
   t: Partial<TankSetupItem> | undefined,
-  i: number
+  i: number,
 ): TankSetupItem {
   const metrics = Array.isArray(t?.metrics) ? t!.metrics : [];
 
@@ -118,8 +123,12 @@ function normalizeTank(
     name: (t?.name || (t as any)?.tankName)?.trim() || `Tank ${i + 1}`,
     capacityLiters: clamp(Number(t?.capacityLiters ?? 1000) || 0, 1, 1_000_000),
     variant: "rect",
-    fluidColor: typeof t?.fluidColor === "string" && t.fluidColor ? t.fluidColor : undefined,
-    tempColor: typeof t?.tempColor === "string" && t.tempColor ? t.tempColor : undefined,
+    fluidColor:
+      typeof t?.fluidColor === "string" && t.fluidColor
+        ? t.fluidColor
+        : undefined,
+    tempColor:
+      typeof t?.tempColor === "string" && t.tempColor ? t.tempColor : undefined,
     disableVolume: !!t?.disableVolume,
     disableTemperature: !!t?.disableTemperature,
     volumeMode: t?.volumeMode || "default",
@@ -127,7 +136,9 @@ function normalizeTank(
     volumeM: t?.volumeM != null ? Number(t.volumeM) : 1.0,
     volumeC: t?.volumeC != null ? Number(t.volumeC) : 0.0,
     temperatureM: t?.temperatureM != null ? Number(t.temperatureM) : 1.0,
-    temperatureC_factor: t?.temperatureC_factor != null ? Number(t.temperatureC_factor) : 0.0,
+    temperatureC_factor:
+      t?.temperatureC_factor != null ? Number(t.temperatureC_factor) : 0.0,
+    isDisabled: !!(t as any)?.is_disabled || !!(t as any)?.isDisabled,
     metrics: [
       normalizeVolumeMetric(metrics[0] || t, `CH${i * 2 + 1}`),
       normalizeTemperatureMetric(metrics[1] || t, `CH${i * 2 + 2}`),
@@ -175,12 +186,19 @@ function getTankValidationError(tank: TankSetupItem): string | null {
   const [volumeMetric, temperatureMetric] = tank.metrics;
 
   if (!tank.name.trim()) return "Tank name is required.";
-  if (!tank.disableVolume && !volumeMetric.channel.trim()) return `${tank.name}: volume channel is required.`;
-  if (!tank.disableTemperature && !temperatureMetric.channel.trim()) return `${tank.name}: temperature channel is required.`;
-  if (!tank.disableVolume && !tank.disableTemperature && volumeMetric.channel === temperatureMetric.channel) {
+  if (!tank.disableVolume && !volumeMetric.channel.trim())
+    return `${tank.name}: volume channel is required.`;
+  if (!tank.disableTemperature && !temperatureMetric.channel.trim())
+    return `${tank.name}: temperature channel is required.`;
+  if (
+    !tank.disableVolume &&
+    !tank.disableTemperature &&
+    volumeMetric.channel === temperatureMetric.channel
+  ) {
     return `${tank.name}: volume and temperature channels must be different.`;
   }
-  if (!(tank.capacityLiters > 0)) return `${tank.name}: capacity must be greater than 0.`;
+  if (!(tank.capacityLiters > 0))
+    return `${tank.name}: capacity must be greater than 0.`;
 
   return null;
 }
@@ -191,18 +209,28 @@ function getTankValidationError(tank: TankSetupItem): string | null {
 function validateTankThresholds(
   limits: TankAlarmLimits,
   capacityLiters: number,
-  tankName: string
+  tankName: string,
 ): string | null {
   const { minVolumeL, maxVolumeL, minTempC, maxTempC } = limits;
 
   if (typeof minVolumeL === "number" && minVolumeL < 0)
     return `${tankName}: Minimum volume threshold cannot be below 0.`;
+  if (typeof minVolumeL === "number" && minVolumeL > capacityLiters)
+    return `${tankName}: Minimum volume threshold cannot exceed tank capacity (${capacityLiters}L).`;
   if (typeof maxVolumeL === "number" && maxVolumeL > capacityLiters)
     return `${tankName}: Maximum volume threshold cannot exceed tank capacity (${capacityLiters}L).`;
-  if (typeof minVolumeL === "number" && typeof maxVolumeL === "number" && minVolumeL >= maxVolumeL)
+  if (
+    typeof minVolumeL === "number" &&
+    typeof maxVolumeL === "number" &&
+    minVolumeL >= maxVolumeL
+  )
     return `${tankName}: Minimum volume threshold must be lower than maximum.`;
 
-  if (typeof minTempC === "number" && typeof maxTempC === "number" && minTempC >= maxTempC)
+  if (
+    typeof minTempC === "number" &&
+    typeof maxTempC === "number" &&
+    minTempC >= maxTempC
+  )
     return `${tankName}: Minimum temperature must be lower than maximum.`;
 
   return null;
@@ -211,7 +239,7 @@ function validateTankThresholds(
 function buildCanonicalAlarmMap(
   source: AlarmMap,
   tanks: TankSetupItem[],
-  tanksCount: number
+  tanksCount: number,
 ): AlarmMap {
   const next: AlarmMap = {};
 
@@ -252,10 +280,15 @@ export default function CompanySetupPage() {
     makeDefaultTank(3),
   ]);
 
-  const [companyBranding, setCompanyBranding] = useState<{ name: string; logoUrl: string; influxOrg?: string; influxBucket?: string }>({ name: "", logoUrl: "" });
+  const [companyBranding, setCompanyBranding] = useState<{
+    name: string;
+    logoUrl: string;
+    influxOrg?: string;
+    influxBucket?: string;
+  }>({ name: "", logoUrl: "" });
   const [applyAllCap, setApplyAllCap] = useState<number>(1000);
   const [alarmMap, setAlarmMap] = useState<AlarmMap>({});
-  
+
   const [availableChannels, setAvailableChannels] = useState<string[]>([]);
 
   const [applyAllMinVol, setApplyAllMinVol] = useState<string>("");
@@ -266,7 +299,9 @@ export default function CompanySetupPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
+    null,
+  );
 
   const [pwdResetRequested, setPwdResetRequested] = useState(false);
   const [pwdResetApproved, setPwdResetApproved] = useState(false);
@@ -274,56 +309,96 @@ export default function CompanySetupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resettingPwd, setResettingPwd] = useState(false);
 
+  const [activeTab, setActiveTab] = useState<"tanks" | "users">("tanks");
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserData, setNewUserData] = useState({
+    username: "",
+    password: "",
+    fullName: "",
+    permissions: [] as any[],
+  });
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [userPermissions, setUserPermissions] = useState<
+    { tankKey: string; accessLevel: string }[] | null
+  >(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<number>(Date.now());
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const setupTanks = useMemo(() => {
+    let base = Array.from({ length: tanksCount }).map((_, i) => {
+      return tanks[i] ?? makeDefaultTank(i);
+    });
+
+    if (role === "user" && userPermissions) {
+      const editableKeys = new Set(
+        userPermissions
+          .filter((p) => p.accessLevel === "edit")
+          .map((p) => p.tankKey.toLowerCase().trim()),
+      );
+      return base.filter((_, i) =>
+        editableKeys.has(tankKey(i).toLowerCase().trim()),
+      );
+    }
+
+    return base;
+  }, [tanks, tanksCount, role, userPermissions]);
+
   const fetchChannels = useCallback(async (org?: string, bucket?: string) => {
     if (!bucket) return;
     try {
-      const res = await fetch(`/api/influx/channels?org=${org || ""}&bucket=${bucket}`);
+      const res = await fetch(
+        `/api/influx/channels?org=${org || ""}&bucket=${bucket}`,
+      );
       const j = await res.json();
       if (res.ok && Array.isArray(j.channels)) {
         setAvailableChannels(j.channels);
       }
-    } catch (e) { console.error("Failed to fetch channels", e); }
+    } catch (e) {
+      console.error("Failed to fetch channels", e);
+    }
   }, []);
 
-  const loadFromServer = useCallback(async (silent = false) => {
-    try {
-      if (!silent) {
-        setInitialLoading(true);
-        setMsg(null);
-      }
-
-      const res = await fetch(
-        `/api/company/settings?slug=${encodeURIComponent(slug)}&t=${Date.now()}`,
-        {
-          cache: "no-store",
+  const loadFromServer = useCallback(
+    async (silent = false) => {
+      try {
+        if (!silent) {
+          setInitialLoading(true);
+          setMsg(null);
         }
-      );
 
-      const j = await res.json().catch(() => ({}));
+        const res = await fetch(
+          `/api/company/settings?slug=${encodeURIComponent(slug)}&t=${Date.now()}`,
+          {
+            cache: "no-store",
+          },
+        );
 
-      if (!res.ok || !j?.ok) {
-        throw new Error(j?.error || "Failed to load settings");
-      }
+        const j = await res.json().catch(() => ({}));
 
-      const company = j?.company || {};
-      const countFromCompany = clamp(
-        Number(company.tanksCount ?? 4),
-        1,
-        20
-      );
+        if (!res.ok || !j?.ok) {
+          throw new Error(j?.error || "Failed to load settings");
+        }
 
-      setCompanyBranding({
-        name: company.name || "",
-        logoUrl: company.logoUrl || "",
-        influxOrg: company.influxOrg,
-        influxBucket: company.influxBucket,
-      });
+        const company = j?.company || {};
+        const countFromCompany = clamp(Number(company.tanksCount ?? 4), 1, 20);
 
-      if (company.influxBucket) {
-        fetchChannels(company.influxOrg, company.influxBucket);
-      }
+        setCompanyBranding({
+          name: company.name || "",
+          logoUrl: company.logoUrl || "",
+          influxOrg: company.influxOrg,
+          influxBucket: company.influxBucket,
+        });
+        setCompanyId(company.id);
 
-      const tankCapacities = Array.isArray(company.tankCapacities)
+        if (company.influxBucket) {
+          fetchChannels(company.influxOrg, company.influxBucket);
+        }
+
+        const tankCapacities = Array.isArray(company.tankCapacities)
           ? company.tankCapacities
           : [];
 
@@ -340,14 +415,14 @@ export default function CompanySetupPage() {
               ...makeDefaultTank(i),
               capacityLiters: Number(tankCapacities[i]) || 1000,
             },
-            i
+            i,
           );
         });
 
         const nextAlarmMap = buildCanonicalAlarmMap(
           (j?.alarms ?? {}) as AlarmMap,
           nextTanks,
-          countFromCompany
+          countFromCompany,
         );
 
         setTanksCount(countFromCompany);
@@ -356,6 +431,8 @@ export default function CompanySetupPage() {
         setAlarmMap(nextAlarmMap);
         setPwdResetRequested(!!company.pwdResetRequested);
         setPwdResetApproved(!!company.pwdResetApproved);
+        setRole(j?.role || null);
+        setUserPermissions(j?.userPermissions || null);
       } catch (e: any) {
         setMsg({
           type: "err",
@@ -364,58 +441,76 @@ export default function CompanySetupPage() {
       } finally {
         setInitialLoading(false);
       }
-    }, [slug]);
+    },
+    [slug],
+  );
 
-    const hasLoadedRef = useRef(false);
+  const hasLoadedRef = useRef(false);
 
-    useEffect(() => {
-      if (slug && !hasLoadedRef.current) {
-        hasLoadedRef.current = true;
-        loadFromServer();
-      }
-    }, [slug, loadFromServer]);
+  useEffect(() => {
+    if (slug && !hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadFromServer();
+    }
+  }, [slug, loadFromServer]);
 
-    useEffect(() => {
-      if (msg) {
-        const timer = setTimeout(() => setMsg(null), 3000);
-        return () => clearTimeout(timer);
-      }
-    }, [msg]);
+  useEffect(() => {
+    if (msg) {
+      const timer = setTimeout(() => setMsg(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [msg]);
 
   const totalCapacity = useMemo(
     () =>
       tanks.reduce(
-        (sum, t) => sum + (Number.isFinite(t.capacityLiters) ? t.capacityLiters : 0),
-        0
+        (sum, t) =>
+          sum + (Number.isFinite(t.capacityLiters) ? t.capacityLiters : 0),
+        0,
       ),
-    [tanks]
+    [tanks],
   );
 
   function syncTanksToCount(nextCount: number) {
     setTanks((prev) => {
       const nextTanks = Array.from({ length: nextCount }, (_, i) =>
-        normalizeTank(prev[i], i)
+        normalizeTank(prev[i], i),
       );
 
       setAlarmMap((prevAlarmMap) =>
-        buildCanonicalAlarmMap(prevAlarmMap, nextTanks, nextCount)
+        buildCanonicalAlarmMap(prevAlarmMap, nextTanks, nextCount),
       );
 
       return nextTanks;
     });
   }
 
-  function updateTankField<K extends "name" | "capacityLiters" | "disableVolume" | "disableTemperature" | "volumeMode" | "temperatureMode" | "volumeM" | "volumeC" | "temperatureM" | "temperatureC_factor">(
-    i: number,
-    key: K,
-    value: TankSetupItem[K]
-  ) {
+  function updateTankField<
+    K extends
+    | "name"
+    | "capacityLiters"
+    | "disableVolume"
+    | "disableTemperature"
+    | "volumeMode"
+    | "temperatureMode"
+    | "volumeM"
+    | "volumeC"
+    | "temperatureM"
+    | "temperatureC_factor"
+    | "isDisabled",
+  >(i: number, key: K, value: TankSetupItem[K]) {
     setTanks((prev) => {
       const copy = [...prev];
       copy[i] = { ...copy[i], [key]: value };
       return copy;
     });
   }
+
+  const deleteTank = (idx: number) => {
+    const newTanks = tanks.filter((_, i) => i !== idx);
+    setTanks(newTanks);
+    setTanksCount(newTanks.length);
+  };
 
   function updateFluidColor(i: number, color: string | undefined) {
     setTanks((prev) => {
@@ -436,7 +531,7 @@ export default function CompanySetupPage() {
   function updateVolumeMetricField(
     tankIndex: number,
     field: "channel" | "unit",
-    value: string
+    value: string,
   ) {
     setTanks((prev) => {
       const copy = [...prev];
@@ -458,7 +553,7 @@ export default function CompanySetupPage() {
   function updateTemperatureMetricField(
     tankIndex: number,
     field: "channel" | "unit",
-    value: string
+    value: string,
   ) {
     setTanks((prev) => {
       const copy = [...prev];
@@ -483,7 +578,7 @@ export default function CompanySetupPage() {
       prev.map((t) => ({
         ...t,
         capacityLiters: v,
-      }))
+      })),
     );
   }
 
@@ -530,41 +625,51 @@ export default function CompanySetupPage() {
     });
   }
 
-  async function saveAndGo() {
-    if (!slug) return;
-
-    setMsg(null);
-    setSaving(true);
+  const performSave = useCallback(async (silent = false) => {
+    if (!slug || initialLoading) return;
 
     const cleanCount = clamp(Math.round(tanksCount), 1, 20);
     const cleanTanks = Array.from({ length: cleanCount }, (_, i) =>
-      normalizeTank(tanks[i], i)
+      normalizeTank(tanks[i], i),
     );
 
-    for (const tank of cleanTanks) {
-      const err = getTankValidationError(tank);
-      if (err) {
-        setSaving(false);
-        setMsg({ type: "err", text: err });
-        return;
-      }
-    }
-
-    const canonicalAlarmMap = buildCanonicalAlarmMap(alarmMap, cleanTanks, cleanCount);
-
-    // Validate thresholds for each tank
-    for (let i = 0; i < cleanCount; i++) {
-      const key = tankKey(i);
-      const lim = canonicalAlarmMap[key];
-      if (lim) {
-        const thresholdErr = validateTankThresholds(lim, cleanTanks[i].capacityLiters, cleanTanks[i].name);
-        if (thresholdErr) {
-          setSaving(false);
-          setMsg({ type: "err", text: thresholdErr });
-          return;
+    // Only block if not silent
+    if (!silent) {
+      for (const tank of cleanTanks) {
+        const err = getTankValidationError(tank);
+        if (err) {
+          setMsg({ type: "err", text: err });
+          return false;
         }
       }
     }
+
+    const canonicalAlarmMap = buildCanonicalAlarmMap(
+      alarmMap,
+      cleanTanks,
+      cleanCount,
+    );
+
+    if (!silent) {
+      for (let i = 0; i < cleanCount; i++) {
+        const key = tankKey(i);
+        const lim = canonicalAlarmMap[key];
+        if (lim) {
+          const thresholdErr = validateTankThresholds(
+            lim,
+            cleanTanks[i].capacityLiters,
+            cleanTanks[i].name,
+          );
+          if (thresholdErr) {
+            setMsg({ type: "err", text: thresholdErr });
+            return false;
+          }
+        }
+      }
+    }
+
+    if (!silent) setSaving(true);
+    setIsSyncing(true);
 
     try {
       const res = await fetch("/api/company/settings", {
@@ -574,26 +679,50 @@ export default function CompanySetupPage() {
           slug,
           tanksCount: cleanCount,
           tankCapacities: cleanTanks.map((t) => t.capacityLiters),
-          tanks: cleanTanks.map(t => ({ ...t, fluidColor: t.fluidColor, tempColor: t.tempColor })),
+          tanks: cleanTanks.map((t) => ({
+            ...t,
+            fluidColor: t.fluidColor,
+            tempColor: t.tempColor,
+          })),
           alarms: canonicalAlarmMap,
         }),
       });
 
       const j = await res.json().catch(() => ({}));
-
-      setSaving(false);
+      if (!silent) setSaving(false);
+      setIsSyncing(false);
 
       if (!res.ok || !j?.ok) {
-        setMsg({ type: "err", text: j?.error ?? "Failed to save settings" });
-        return;
+        if (!silent) setMsg({ type: "err", text: j?.error ?? "Failed to save settings" });
+        return false;
       }
 
-      setAlarmMap(canonicalAlarmMap);
+      setLastSaved(Date.now());
+      return true;
+    } catch {
+      if (!silent) setSaving(false);
+      setIsSyncing(false);
+      if (!silent) setMsg({ type: "err", text: "Failed to save settings" });
+      return false;
+    }
+  }, [slug, tanks, tanksCount, alarmMap, initialLoading]);
+
+  // Auto-save logic
+  useEffect(() => {
+    if (initialLoading) return;
+    
+    const timer = setTimeout(() => {
+      performSave(true);
+    }, 1500); // Save after 1.5s of inactivity
+
+    return () => clearTimeout(timer);
+  }, [tanks, tanksCount, alarmMap, performSave, initialLoading]);
+
+  async function saveAndGo() {
+    const ok = await performSave(false);
+    if (ok) {
       setMsg({ type: "ok", text: "Saved ✅ Redirecting…" });
       window.location.href = `/company/${slug}/dashboard`;
-    } catch {
-      setSaving(false);
-      setMsg({ type: "err", text: "Failed to save settings" });
     }
   }
 
@@ -645,7 +774,10 @@ export default function CompanySetupPage() {
 
   async function handlePasswordReset() {
     if (!newPassword || newPassword.length < 4) {
-      setMsg({ type: "err", text: "New password must be at least 4 characters." });
+      setMsg({
+        type: "err",
+        text: "New password must be at least 4 characters.",
+      });
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -679,18 +811,139 @@ export default function CompanySetupPage() {
     }
   }
 
+  const fetchUsers = useCallback(async () => {
+    if (!companyId) return;
+    setLoadingUsers(true);
+    try {
+      const res = await fetch(`/api/company/users?companyId=${companyId}`);
+      const j = await res.json();
+      if (res.ok) setUsers(j.users || []);
+    } catch (e) {
+      console.error("Failed to fetch users", e);
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, [companyId]);
+
+  useEffect(() => {
+    if (activeTab === "users") {
+      fetchUsers();
+    }
+  }, [activeTab, fetchUsers]);
+
+  const openEditUser = (user: any) => {
+    setNewUserData({
+      username: user.username,
+      password: "", // Keep password empty unless they want to change it
+      fullName: user.full_name || "",
+      permissions: [...(user.permissions || [])],
+    });
+    setEditingUserId(user.id);
+    setShowAddUserModal(true);
+  };
+
+  async function handleAddUser() {
+    if (
+      !newUserData.username ||
+      (!editingUserId && !newUserData.password) ||
+      !companyId
+    ) {
+      setMsg({ type: "err", text: "Username and password are required" });
+      return;
+    }
+
+    setLoadingUsers(true);
+    try {
+      const isUpdate = !!editingUserId;
+      const res = await fetch("/api/company/users", {
+        method: isUpdate ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...newUserData,
+          id: editingUserId,
+          companyId,
+          slug,
+        }),
+      });
+      const j = await res.json();
+      if (j.ok) {
+        setMsg({
+          type: "ok",
+          text: editingUserId
+            ? "User updated successfully"
+            : "User created successfully",
+        });
+        setShowAddUserModal(false);
+        setEditingUserId(null);
+        setNewUserData({
+          username: "",
+          password: "",
+          fullName: "",
+          permissions: [],
+        });
+        fetchUsers();
+      } else {
+        setMsg({ type: "err", text: j.error || "Failed to process user" });
+      }
+    } catch (e) {
+      setMsg({ type: "err", text: "Failed to process user" });
+    } finally {
+      setLoadingUsers(false);
+    }
+  }
+
+  async function handleDeleteUser(id: string) {
+    if (!confirm("Are you sure you want to delete this user?")) return;
+    try {
+      const res = await fetch(`/api/company/users?id=${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setMsg({ type: "ok", text: "User deleted" });
+        fetchUsers();
+      }
+    } catch (e) {
+      setMsg({ type: "err", text: "Failed to delete user" });
+    }
+  }
+
+  function togglePermission(tankKey: string, level: "view" | "edit") {
+    setNewUserData((prev) => {
+      const perms = [...prev.permissions];
+      const idx = perms.findIndex((p) => p.tankKey === tankKey);
+      if (idx >= 0) {
+        if (perms[idx].accessLevel === level) {
+          perms.splice(idx, 1);
+        } else {
+          perms[idx].accessLevel = level;
+        }
+      } else {
+        perms.push({ tankKey, accessLevel: level });
+      }
+      return { ...prev, permissions: perms };
+    });
+  }
+
+  if (initialLoading) {
+    return (
+      <main className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 rounded-full border-4 border-white/10 border-t-white animate-spin" />
+          <div className="text-white/40 text-sm font-medium tracking-widest uppercase">
+            Loading Setup
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="relative min-h-screen overflow-hidden text-black dark:text-white transition-all duration-500">
+    <main className="min-h-screen bg-white text-black transition-colors duration-300 dark:bg-[#0a0a0a] dark:text-white relative min-h-screen overflow-hidden transition-all duration-500">
       <BackgroundFX />
       <div className="relative">
         <TopHero
           brand="Ekatva"
-          logoUrl={companyBranding.logoUrl}
-          companyName={companyBranding.name}
-          eyebrow="COMPANY SETUP"
-          titleLine1="Configure"
-          titleLine2="Your Tanks"
-          subtitle="Fixed volume & temperature channels. Admin chooses channel, unit, and capacity."
+          hideViewTanks
           navItems={[
             { label: "Setup", href: `/company/${slug}/setup` },
             { label: "Dashboard", href: `/company/${slug}/dashboard` },
@@ -698,373 +951,1172 @@ export default function CompanySetupPage() {
           ]}
         />
 
-        <section className="mx-auto max-w-6xl px-6 pb-20 pt-10">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-1 space-y-6">
+        <section className="mx-auto max-w-[1400px] px-6 pb-20">
+          <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] items-start gap-8">
+            {/* Sidebar Left: Branding + Actions */}
+            <div className="space-y-6 lg:sticky lg:top-6">
+              {/* Company Branding */}
+              <div className="rounded-3xl border border-black/10 bg-white/70 p-8 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+                <div className="flex flex-col items-center text-center">
+                  {companyBranding.logoUrl ? (
+                    <img
+                      src={companyBranding.logoUrl}
+                      alt={companyBranding.name}
+                      className="h-20 w-auto object-contain mb-4"
+                    />
+                  ) : null}
+                  <h1 className="text-2xl font-bold text-black dark:text-white">
+                    {companyBranding.name}
+                  </h1>
+                  <div className="mt-2 text-[10px] uppercase tracking-[0.2em] opacity-50">
+                    Configuration Portal
+                  </div>
+                </div>
+              </div>
+
               {/* Security Card */}
               <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
                 <h3 className="text-sm font-semibold">Security</h3>
                 {!pwdResetRequested && !pwdResetApproved && (
-                  <button onClick={handleRequestReset} className="mt-3 w-full rounded-xl bg-black/5 dark:bg-white/5 py-2 text-xs font-bold border border-black/10 hover:bg-black/10 transition">Request Password Change</button>
+                  <button
+                    onClick={handleRequestReset}
+                    className="mt-3 w-full rounded-xl bg-black/5 dark:bg-white/5 py-2 text-xs font-bold border border-black/10 hover:bg-black/10 transition"
+                  >
+                    Request Password Change
+                  </button>
                 )}
                 {pwdResetRequested && !pwdResetApproved && (
-                  <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600">Waiting for admin approval...</div>
+                  <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600">
+                    Waiting for admin approval...
+                  </div>
                 )}
                 {pwdResetApproved && (
                   <div className="mt-3 space-y-3">
-                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-600 font-medium">Approved! Set new password:</div>
-                    <PasswordInput value={newPassword} onChange={setNewPassword} placeholder="New Password" className="!py-2 !text-xs" />
-                    <PasswordInput value={confirmPassword} onChange={setConfirmPassword} placeholder="Confirm Password" className="!py-2 !text-xs" />
-                    <button onClick={handlePasswordReset} disabled={resettingPwd} className="w-full rounded-xl bg-black dark:bg-white py-2 text-xs font-bold text-white dark:text-black transition-opacity hover:opacity-90">{resettingPwd ? "Updating..." : "Update Password"}</button>
-                  </div>
-                )}
-              </div>
-
-              {/* Tank Settings Card */}
-              <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
-                <h2 className="text-lg font-semibold">Tank Settings</h2>
-                <p className="mt-1 text-sm text-black/60 dark:text-white/55">Set counts, names & alarms.</p>
-
-                {initialLoading && (
-                  <div className="mt-4 rounded-xl bg-black/5 dark:bg-white/5 p-3 text-xs text-black/50 dark:text-white/50">Loading settings…</div>
-                )}
-
-              <div className="mt-6">
-                <div className="flex justify-between text-sm">
-                  <span>Tanks count</span>
-                  <span className="font-bold">{tanksCount}</span>
-                </div>
-                <input
-                  type="range" min={1} max={20}
-                  value={tanksCount}
-                  onChange={(e) => {
-                    const n = clamp(Number(e.target.value), 1, 20);
-                    setTanksCount(n);
-                    syncTanksToCount(n);
-                  }}
-                  className="mt-3 w-full"
-                />
-              </div>
-
-              <div className="mt-6 space-y-4">
-                <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 bg-black/5 dark:bg-black/20">
-                  <div className="text-sm font-medium">Bulk Capacity</div>
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      type="number" value={applyAllCap}
-                      onChange={(e) => setApplyAllCap(Number(e.target.value))}
-                      className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none backdrop-blur-sm"
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-600 font-medium">
+                      Approved! Set new password:
+                    </div>
+                    <PasswordInput
+                      value={newPassword}
+                      onChange={setNewPassword}
+                      placeholder="New Password"
+                      className="!py-2 !text-xs"
                     />
-                    <button onClick={applyToAllCap} className="rounded-xl bg-black dark:bg-white px-4 py-2 text-sm font-bold text-white dark:text-black hover:opacity-90">Apply</button>
+                    <PasswordInput
+                      value={confirmPassword}
+                      onChange={setConfirmPassword}
+                      placeholder="Confirm Password"
+                      className="!py-2 !text-xs"
+                    />
+                    <button
+                      onClick={handlePasswordReset}
+                      disabled={resettingPwd}
+                      className="w-full rounded-xl bg-black dark:bg-white py-2 text-xs font-bold text-white dark:text-black transition-opacity hover:opacity-90"
+                    >
+                      {resettingPwd ? "Updating..." : "Update Password"}
+                    </button>
                   </div>
-                </div>
-
-                <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 bg-black/5 dark:bg-black/20">
-                  <div className="text-sm font-medium">Bulk Alarm Limits</div>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <input value={applyAllMinVol} onChange={(e) => setApplyAllMinVol(e.target.value)} placeholder="Min Vol" className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm" />
-                    <input value={applyAllMaxVol} onChange={(e) => setApplyAllMaxVol(e.target.value)} placeholder="Max Vol" className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm" />
-                    <input value={applyAllMinTemp} onChange={(e) => setApplyAllMinTemp(e.target.value)} placeholder="Min Temp" className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm" />
-                    <input value={applyAllMaxTemp} onChange={(e) => setApplyAllMaxTemp(e.target.value)} placeholder="Max Temp" className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm" />
-                  </div>
-                  <button onClick={applyLimitsToAll} className="mt-3 w-full rounded-xl bg-black/5 dark:bg-white/10 py-2 border border-black/10 font-bold hover:bg-black/10 transition text-xs">Apply to all</button>
-                </div>
+                )}
               </div>
 
-              <div className="mt-6">
-                <div className="text-sm font-medium">CSV Data Import</div>
-                <input
-                  type="file" accept=".csv" disabled={uploading}
-                  onChange={(e) => { const f = e.target.files?.[0]; if(f) uploadCSV(f); }}
-                  className="mt-2 text-xs w-full file:mr-4 file:rounded-xl file:border file:border-black/10 dark:file:border-white/10 file:bg-black/5 dark:file:bg-white/10 file:backdrop-blur-md file:px-4 file:py-2 file:text-black dark:file:text-white hover:file:bg-black/10 dark:hover:file:bg-white/20 transition cursor-pointer"
-                />
-              </div>
+              {/* Setup Navigation */}
 
+
+              {role !== "user" && (
+                <>
+                  {/* Tank Settings Card */}
+                  <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+                    <h2 className="text-lg font-semibold">Tank Settings</h2>
+                    <p className="mt-1 text-sm text-black/60 dark:text-white/55">
+                      Set counts, names & alarms.
+                    </p>
+
+                    {initialLoading && (
+                      <div className="mt-4 rounded-xl bg-black/5 dark:bg-white/5 p-3 text-xs text-black/50 dark:text-white/50">
+                        Loading settings…
+                      </div>
+                    )}
+
+                    <div className="mt-6">
+                      <div className="flex justify-between text-sm">
+                        <span>Tanks count</span>
+                        <span className="font-bold">{tanksCount}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={1}
+                        max={20}
+                        value={tanksCount}
+                        onChange={(e) => {
+                          const n = clamp(Number(e.target.value), 1, 20);
+                          setTanksCount(n);
+                          syncTanksToCount(n);
+                        }}
+                        className="mt-3 w-full"
+                      />
+                    </div>
+
+                    <div className="mt-6 space-y-4">
+                      <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 bg-black/5 dark:bg-black/20">
+                        <div className="text-sm font-medium">Bulk Capacity</div>
+                        <div className="mt-2 flex gap-2">
+                          <input
+                            type="number"
+                            value={applyAllCap}
+                            onChange={(e) =>
+                              setApplyAllCap(Number(e.target.value))
+                            }
+                            className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none backdrop-blur-sm"
+                          />
+                          <button
+                            onClick={applyToAllCap}
+                            className="rounded-xl bg-black dark:bg-white px-4 py-2 text-sm font-bold text-white dark:text-black hover:opacity-90"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 bg-black/5 dark:bg-black/20">
+                        <div className="text-sm font-medium">
+                          Bulk Alarm Limits
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <input
+                            value={applyAllMinVol}
+                            onChange={(e) => setApplyAllMinVol(e.target.value)}
+                            placeholder="Min Vol"
+                            className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm"
+                          />
+                          <input
+                            value={applyAllMaxVol}
+                            onChange={(e) => setApplyAllMaxVol(e.target.value)}
+                            placeholder="Max Vol"
+                            className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm"
+                          />
+                          <input
+                            value={applyAllMinTemp}
+                            onChange={(e) => setApplyAllMinTemp(e.target.value)}
+                            placeholder="Min Temp"
+                            className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm"
+                          />
+                          <input
+                            value={applyAllMaxTemp}
+                            onChange={(e) => setApplyAllMaxTemp(e.target.value)}
+                            placeholder="Max Temp"
+                            className="w-full rounded-xl border border-black/10 bg-black/5 dark:bg-black/30 px-3 py-2 text-xs backdrop-blur-sm"
+                          />
+                        </div>
+                        <button
+                          onClick={applyLimitsToAll}
+                          className="mt-3 w-full rounded-xl bg-black/5 dark:bg-white/10 py-2 border border-black/10 font-bold hover:bg-black/10 transition text-xs"
+                        >
+                          Apply to all
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-6">
+                      <div className="text-sm font-medium">CSV Data Import</div>
+                      <input
+                        type="file"
+                        accept=".csv"
+                        disabled={uploading}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) uploadCSV(f);
+                        }}
+                        className="mt-2 text-xs w-full file:mr-4 file:rounded-xl file:border file:border-black/10 dark:file:border-white/10 file:bg-black/5 dark:file:bg-white/10 file:backdrop-blur-md file:px-4 file:py-2 file:text-black dark:file:text-white hover:file:bg-black/10 dark:hover:file:bg-white/20 transition cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               {msg && (
-                <div className={`mt-6 rounded-xl border p-3 text-xs font-medium animate-in fade-in slide-in-from-top-2 duration-300 ${msg.type === "ok" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600" : "bg-red-500/10 border-red-500/30 text-red-600"}`}>
+                <div
+                  className={`mt-6 rounded-xl border p-3 text-xs font-medium animate-in fade-in slide-in-from-top-2 duration-300 ${msg.type === "ok" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600" : "bg-red-500/10 border-red-500/30 text-red-600"}`}
+                >
                   {msg.text}
                 </div>
               )}
 
-              <button onClick={saveAndGo} disabled={saving || initialLoading} className="mt-6 w-full rounded-2xl bg-black dark:bg-white py-3 font-bold text-white dark:text-black shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50">
-                {saving ? "Saving…" : "Save & Continue"}
+              <button
+                onClick={saveAndGo}
+                disabled={saving || initialLoading}
+                className="mt-6 w-full rounded-2xl bg-black dark:bg-white py-3 font-bold text-white dark:text-black shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save & Dashboard"}
               </button>
-              
-              <a href={`/company/${slug}/dashboard`} className="mt-4 block text-center text-xs text-black/40 dark:text-white/40 hover:text-black/60 dark:hover:text-white/60 transition">
+
+              <a
+                href={`/company/${slug}/dashboard`}
+                className="mt-4 block text-center text-xs text-black/40 dark:text-white/40 hover:text-black/60 dark:hover:text-white/60 transition"
+              >
                 Skip to Dashboard →
               </a>
             </div>
-          </div>
 
-            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/50 dark:bg-white/5 p-6 shadow-2xl backdrop-blur-xl lg:col-span-2 overflow-y-auto max-h-[1200px]">
-              <h2 className="text-lg font-semibold">Individual Tank Configuration</h2>
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {Array.from({ length: tanksCount }).map((_, i) => {
-                  const key = tankKey(i);
-                  const tank = tanks[i] ?? makeDefaultTank(i);
-                  const lim = cleanLimits((alarmMap[key] ?? {}) as TankAlarmLimits);
-                  const thresholdError = !isEmptyLimits(lim) ? validateTankThresholds(lim, tank.capacityLiters, tank.name) : null;
-                  
-                  return (
-                    <div key={key} className="rounded-2xl border border-black/10 dark:border-white/10 p-5 bg-black/5 dark:bg-black/20 text-xs">
-                      <div className="flex justify-between items-center font-bold mb-4 border-b border-black/5 dark:border-white/5 pb-2">
-                        <span className="text-sm">{key}</span>
-                        {!isEmptyLimits(lim) && <span className="text-[10px] bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full">Limits Active</span>}
+            <div className="overflow-hidden">
+              {/* Right Column Header */}
+              <div className="flex items-center justify-between px-0 pb-2">
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setActiveTab("tanks")}
+                    className={`rounded-2xl px-5 py-2 text-sm font-semibold transition ${activeTab === "tanks"
+                      ? "bg-black text-white dark:bg-white dark:text-black shadow-lg"
+                      : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10"
+                      }`}
+                  >
+                    Tank Configuration
+                  </button>
+
+                  {role !== "user" && (
+                    <button
+                      onClick={() => setActiveTab("users")}
+                      className={`rounded-2xl px-5 py-2 text-sm font-semibold transition ${activeTab === "users"
+                        ? "bg-black text-white dark:bg-white dark:text-black shadow-lg"
+                        : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10"
+                        }`}
+                    >
+                      User Management
+                    </button>
+                  )}
+                </div>
+
+                {activeTab === "users" && (
+                  <button
+                    onClick={() => setShowAddUserModal(true)}
+                    className="rounded-xl bg-black dark:bg-white px-4 py-2 text-xs font-bold text-white dark:text-black hover:opacity-90 transition shadow-lg"
+                  >
+                    Add Sub-User
+                  </button>
+                )}
+              </div>
+
+              {/* Right Column Scroll Area */}
+              <div className="overflow-y-auto max-h-[1200px]">
+
+                {activeTab === "tanks" ? (
+                  <>
+                    <div className="mt-6 flex items-center justify-between">
+                      <div className="flex flex-col gap-1">
+                        <h2 className="text-xl font-bold md:text-2xl">
+                          Tanks Configuration
+                        </h2>
+                        <p className="text-xs opacity-50">
+                          Changes are saved automatically as you work.
+                        </p>
                       </div>
-                      
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <span className="opacity-60 block mb-1">Display Name</span>
-                            <input value={tank.name} onChange={(e) => updateTankField(i, "name", e.target.value)} className="w-full border border-black/10 rounded-xl px-3 py-2 bg-black/5 dark:bg-black/30 transition-shadow focus:shadow-md outline-none backdrop-blur-sm shadow-inner" />
-                          </div>
-                          <div>
-                            <span className="opacity-60 block mb-1">Capacity (L)</span>
-                            <input type="number" value={tank.capacityLiters} onChange={(e) => updateTankField(i, "capacityLiters", Number(e.target.value))} className="w-full border border-black/10 rounded-xl px-3 py-2 bg-black/5 dark:bg-black/30 outline-none backdrop-blur-sm shadow-inner" />
-                          </div>
-                        </div>
-
-                        {/* Accent Colors */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <span className="opacity-60 block mb-2 font-medium">Vol Color</span>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <button
-                                type="button"
-                                onClick={() => updateFluidColor(i, undefined)}
-                                className={[
-                                  "h-5 w-5 rounded-full border transition-all flex items-center justify-center text-[7px]",
-                                  !tank.fluidColor
-                                    ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
-                                    : "border-black/15 dark:border-white/15 hover:scale-105",
-                                ].join(" ")}
-                                style={{ background: "#22d3ee" }}
-                                title="Default Volume"
-                              >
-                                {!tank.fluidColor && <span className="text-white font-bold drop-shadow">✓</span>}
-                              </button>
-                              {FLUID_COLOR_SWATCHES.slice(1, 5).map((color) => (
-                                <button
-                                  key={color}
-                                  type="button"
-                                  onClick={() => updateFluidColor(i, color)}
-                                  className={[
-                                    "h-5 w-5 rounded-full border transition-all flex items-center justify-center",
-                                    tank.fluidColor === color
-                                      ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
-                                      : "border-black/10 dark:border-white/10 hover:scale-105",
-                                  ].join(" ")}
-                                  style={{ backgroundColor: color }}
-                                  title={color}
-                                >
-                                  {tank.fluidColor === color && <span className="text-white text-[7px] font-bold drop-shadow">✓</span>}
-                                </button>
-                              ))}
-                              <label className="relative h-5 w-5 rounded-full border border-dashed border-black/20 dark:border-white/20 cursor-pointer hover:scale-105 transition-all flex items-center justify-center overflow-hidden">
-                                <input
-                                  type="color"
-                                  value={tank.fluidColor && !FLUID_COLOR_SWATCHES.includes(tank.fluidColor) ? tank.fluidColor : "#22d3ee"}
-                                  onChange={(e) => updateFluidColor(i, e.target.value)}
-                                  className="absolute inset-0 opacity-0 cursor-pointer"
-                                />
-                                {tank.fluidColor && !FLUID_COLOR_SWATCHES.includes(tank.fluidColor) ? (
-                                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: tank.fluidColor }} />
-                                ) : (
-                                  <span className="text-[8px] opacity-40">+</span>
-                                )}
-                              </label>
-                            </div>
-                          </div>
-
-                          <div>
-                            <span className="opacity-60 block mb-2 font-medium">Temp Color</span>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <button
-                                type="button"
-                                onClick={() => updateTempColor(i, undefined)}
-                                className={[
-                                  "h-5 w-5 rounded-full border transition-all flex items-center justify-center text-[7px]",
-                                  !tank.tempColor
-                                    ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
-                                    : "border-black/15 dark:border-white/15 hover:scale-105",
-                                ].join(" ")}
-                                style={{ background: "#f59e0b" }}
-                                title="Default Temp"
-                              >
-                                {!tank.tempColor && <span className="text-white font-bold drop-shadow">✓</span>}
-                              </button>
-                              {FLUID_COLOR_SWATCHES.slice(1, 5).map((color) => (
-                                <button
-                                  key={color}
-                                  type="button"
-                                  onClick={() => updateTempColor(i, color)}
-                                  className={[
-                                    "h-5 w-5 rounded-full border transition-all flex items-center justify-center",
-                                    tank.tempColor === color
-                                      ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
-                                      : "border-black/10 dark:border-white/10 hover:scale-105",
-                                  ].join(" ")}
-                                  style={{ backgroundColor: color }}
-                                  title={color}
-                                >
-                                  {tank.tempColor === color && <span className="text-white text-[7px] font-bold drop-shadow">✓</span>}
-                                </button>
-                              ))}
-                              <label className="relative h-5 w-5 rounded-full border border-dashed border-black/20 dark:border-white/20 cursor-pointer hover:scale-105 transition-all flex items-center justify-center overflow-hidden">
-                                <input
-                                  type="color"
-                                  value={tank.tempColor && !FLUID_COLOR_SWATCHES.includes(tank.tempColor) ? tank.tempColor : "#f59e0b"}
-                                  onChange={(e) => updateTempColor(i, e.target.value)}
-                                  className="absolute inset-0 opacity-0 cursor-pointer"
-                                />
-                                {tank.tempColor && !FLUID_COLOR_SWATCHES.includes(tank.tempColor) ? (
-                                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: tank.tempColor }} />
-                                ) : (
-                                  <span className="text-[8px] opacity-40">+</span>
-                                )}
-                              </label>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className={`p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5 ${tank.disableVolume ? 'opacity-50 grayscale' : ''}`}>
-                            <div className="flex justify-between items-center">
-                              <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">Metric 1 (Vol)</span>
-                              <label className="flex items-center gap-1.5 cursor-pointer">
-                                <input type="checkbox" checked={!!tank.disableVolume} onChange={(e) => updateTankField(i, "disableVolume", e.target.checked)} className="cursor-pointer" />
-                                <span className="text-[10px] opacity-70">Disable</span>
-                              </label>
-                            </div>
-                            <div className={tank.disableVolume ? 'pointer-events-none' : ''}>
-                                <span className="text-[10px] opacity-60">Channel</span>
-                                <select value={tank.metrics[0].channel} onChange={(e) => updateVolumeMetricField(i, "channel", e.target.value)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
-                                    {(availableChannels.length > 0 ? availableChannels : Array.from({length:24}, (_, idx) => `CH${idx+1}`)).map(ch => <option key={ch} value={ch}>{ch}</option>)}
-                                </select>
-                            </div>
-                            <div className={tank.disableVolume ? 'pointer-events-none' : ''}>
-                                <span className="text-[10px] opacity-60">Unit</span>
-                                <select value={tank.metrics[0].unit} onChange={(e) => updateVolumeMetricField(i, "unit", e.target.value as VolumeUnit)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
-                                    {VOLUME_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                                </select>
-                            </div>
-                            <div className={tank.disableVolume ? 'pointer-events-none' : ''}>
-                                <span className="text-[10px] opacity-60">Input Mode</span>
-                                <select value={tank.volumeMode} onChange={(e) => updateTankField(i, "volumeMode", e.target.value as MetricMode)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
-                                    <option value="default">Default (mA)</option>
-                                    <option value="percent">Percentage (0-100)</option>
-                                    <option value="inverted">Inverted (100-0)</option>
-                                </select>
-                            </div>
-                            <div className={`grid grid-cols-2 gap-2 ${tank.disableVolume ? 'pointer-events-none' : ''}`}>
-                                <div>
-                                    <span className="text-[10px] opacity-60">Factor M</span>
-                                    <input type="number" step="0.0001" value={tank.volumeM ?? 1} onChange={(e) => updateTankField(i, "volumeM", Number(e.target.value))} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20" />
-                                </div>
-                                <div>
-                                    <span className="text-[10px] opacity-60">Offset C</span>
-                                    <input type="number" step="0.1" value={tank.volumeC ?? 0} onChange={(e) => updateTankField(i, "volumeC", Number(e.target.value))} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20" />
-                                </div>
-                            </div>
-                          </div>
-
-                          <div className={`p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5 ${tank.disableTemperature ? 'opacity-50 grayscale' : ''}`}>
-                            <div className="flex justify-between items-center">
-                              <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">Metric 2 (Temp)</span>
-                              <label className="flex items-center gap-1.5 cursor-pointer">
-                                <input type="checkbox" checked={!!tank.disableTemperature} onChange={(e) => updateTankField(i, "disableTemperature", e.target.checked)} className="cursor-pointer" />
-                                <span className="text-[10px] opacity-70">Disable</span>
-                              </label>
-                            </div>
-                            <div className={tank.disableTemperature ? 'pointer-events-none' : ''}>
-                                <span className="text-[10px] opacity-60">Channel</span>
-                                <select value={tank.metrics[1].channel} onChange={(e) => updateTemperatureMetricField(i, "channel", e.target.value)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
-                                    {(availableChannels.length > 0 ? availableChannels : Array.from({length:24}, (_, idx) => `CH${idx+1}`)).map(ch => <option key={ch} value={ch}>{ch}</option>)}
-                                </select>
-                            </div>
-                            <div className={tank.disableTemperature ? 'pointer-events-none' : ''}>
-                                <span className="text-[10px] opacity-60">Unit</span>
-                                <select value={tank.metrics[1].unit} onChange={(e) => updateTemperatureMetricField(i, "unit", e.target.value as TemperatureUnit)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
-                                    {TEMPERATURE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                                </select>
-                            </div>
-                            <div className={tank.disableTemperature ? 'pointer-events-none' : ''}>
-                                <span className="text-[10px] opacity-60">Input Mode</span>
-                                <select value={tank.temperatureMode} onChange={(e) => updateTankField(i, "temperatureMode", e.target.value as MetricMode)} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20">
-                                    <option value="default">Default (mA)</option>
-                                    <option value="percent">Percentage (0-100)</option>
-                                    <option value="inverted">Inverted (100-0)</option>
-                                </select>
-                            </div>
-                            <div className={`grid grid-cols-2 gap-2 ${tank.disableTemperature ? 'pointer-events-none' : ''}`}>
-                                <div>
-                                    <span className="text-[10px] opacity-60">Factor M</span>
-                                    <input type="number" step="0.0001" value={tank.temperatureM ?? 1} onChange={(e) => updateTankField(i, "temperatureM", Number(e.target.value))} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20" />
-                                </div>
-                                <div>
-                                    <span className="text-[10px] opacity-60">Offset C</span>
-                                    <input type="number" step="0.1" value={tank.temperatureC_factor ?? 0} onChange={(e) => updateTankField(i, "temperatureC_factor", Number(e.target.value))} className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20" />
-                                </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div>
-                            <span className="opacity-60 block mb-2 font-medium">Alarm Limits (Thresholds)</span>
-                            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-                                <div className="space-y-1">
-                                    <span className="text-[10px] opacity-50 flex justify-between">
-                                      Min Volume <span>({tank.metrics[0].unit})</span>
-                                    </span>
-                                    <input value={typeof lim.minVolumeL === "number" ? String(lim.minVolumeL) : ""} onChange={(e) => updateTankLimit(i, { minVolumeL: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
-                                </div>
-                                <div className="space-y-1">
-                                    <span className="text-[10px] opacity-50 flex justify-between">
-                                      Max Volume <span>({tank.metrics[0].unit})</span>
-                                    </span>
-                                    <input value={typeof lim.maxVolumeL === "number" ? String(lim.maxVolumeL) : ""} onChange={(e) => updateTankLimit(i, { maxVolumeL: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
-                                </div>
-                                <div className="space-y-1">
-                                    <span className="text-[10px] opacity-50 flex justify-between">
-                                      Min Temp <span>({tank.metrics[1].unit})</span>
-                                    </span>
-                                    <input value={typeof lim.minTempC === "number" ? String(lim.minTempC) : ""} onChange={(e) => updateTankLimit(i, { minTempC: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
-                                </div>
-                                <div className="space-y-1">
-                                    <span className="text-[10px] opacity-50 flex justify-between">
-                                      Max Temp <span>({tank.metrics[1].unit})</span>
-                                    </span>
-                                    <input value={typeof lim.maxTempC === "number" ? String(lim.maxTempC) : ""} onChange={(e) => updateTankLimit(i, { maxTempC: numOrUndef(e.target.value) })} placeholder="N/A" className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm" />
-                                </div>
-                            </div>
-                            {/* Inline threshold validation error */}
-                            {thresholdError && (
-                              <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-[10px] text-red-600 dark:text-red-300 font-medium">
-                                {thresholdError}
-                              </div>
-                            )}
-                        </div>
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/5 text-[10px] font-bold uppercase tracking-wider">
+                        {isSyncing ? (
+                          <span className="text-blue-500 animate-pulse flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-bounce" />
+                            Syncing...
+                          </span>
+                        ) : (
+                          <span className="opacity-40">All changes saved</span>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-              
-              <div className="mt-8 rounded-2xl p-6 bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 text-xs space-y-3">
-                  <h4 className="font-bold opacity-80 uppercase tracking-widest text-[10px]">Technical Information</h4>
-                  <p className="opacity-60 leading-relaxed">
-                      All tanks are configured with dual-metric tracking. Volume measurements are normalized to Liters for analytics, while temperature is tracked in Celsius. Calibration logic automatically handles unit conversion based on your selections.
-                  </p>
-                  <ul className="list-disc pl-4 opacity-50 space-y-1">
-                      <li>Metric 1: High-precision volume/level tracking.</li>
-                      <li>Metric 2: Thermal monitoring and compensation.</li>
-                      <li>Scaling: 1-20 tanks per industrial instance.</li>
-                  </ul>
+                    <div
+                      className={`mt-6 grid gap-4 ${setupTanks.length === 1
+                        ? "grid-cols-1 max-w-md mx-auto"
+                        : "grid-cols-1 sm:grid-cols-2"
+                        }`}
+                    >
+                      {setupTanks.map((tank, i) => {
+                        const key = tankKey(i);
+                        const lim = cleanLimits(
+                          (alarmMap[key] ?? {}) as TankAlarmLimits,
+                        );
+                        const thresholdError = !isEmptyLimits(lim)
+                          ? validateTankThresholds(
+                            lim,
+                            tank.capacityLiters,
+                            tank.name,
+                          )
+                          : null;
+
+                        return (
+                          <div
+                            key={key}
+                            className="rounded-2xl border border-black/10 dark:border-white/10 p-5 bg-black/5 dark:bg-black/20 text-xs"
+                          >
+                            <div
+                              className={`flex justify-between items-center font-bold mb-4 border-b border-black/5 dark:border-white/5 pb-2 ${tank.isDisabled ? "opacity-40 grayscale" : ""}`}
+                            >
+                              <div className="flex flex-col">
+                                <span className="text-sm">
+                                  {tank.name || key}
+                                </span>
+                                {tank.isDisabled && (
+                                  <span className="text-[9px] text-orange-500 uppercase">
+                                    Disabled
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() =>
+                                    updateTankField(
+                                      i,
+                                      "isDisabled",
+                                      !tank.isDisabled,
+                                    )
+                                  }
+                                  className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${tank.isDisabled ? "bg-orange-500 text-white" : "bg-black/5 dark:bg-white/10 opacity-60"}`}
+                                >
+                                  {tank.isDisabled ? "Enable" : "Disable"}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `Delete ${tank.name || key}?`,
+                                      )
+                                    )
+                                      deleteTank(i);
+                                  }}
+                                  className="px-3 py-1 rounded-lg text-[10px] font-bold bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className={`space-y-4 ${tank.isDisabled ? "pointer-events-none opacity-50 grayscale" : ""}`}>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <span className="opacity-60 block mb-1">
+                                    Display Name
+                                  </span>
+                                  <input
+                                    value={tank.name}
+                                    onChange={(e) =>
+                                      updateTankField(i, "name", e.target.value)
+                                    }
+                                    className="w-full border border-black/10 rounded-xl px-3 py-2 bg-black/5 dark:bg-black/30 transition-shadow focus:shadow-md outline-none backdrop-blur-sm shadow-inner"
+                                  />
+                                </div>
+                                <div>
+                                  <span className="opacity-60 block mb-1">
+                                    Capacity (L)
+                                  </span>
+                                  <input
+                                    type="number"
+                                    value={tank.capacityLiters}
+                                    onChange={(e) =>
+                                      updateTankField(
+                                        i,
+                                        "capacityLiters",
+                                        Number(e.target.value),
+                                      )
+                                    }
+                                    className="w-full border border-black/10 rounded-xl px-3 py-2 bg-black/5 dark:bg-black/30 outline-none backdrop-blur-sm shadow-inner"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Accent Colors */}
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <span className="opacity-60 block mb-2 font-medium">
+                                    Vol Color
+                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateFluidColor(i, undefined)
+                                      }
+                                      className={[
+                                        "h-5 w-5 rounded-full border transition-all flex items-center justify-center text-[7px]",
+                                        !tank.fluidColor
+                                          ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
+                                          : "border-black/15 dark:border-white/15 hover:scale-105",
+                                      ].join(" ")}
+                                      style={{ background: "#22d3ee" }}
+                                      title="Default Volume"
+                                    >
+                                      {!tank.fluidColor && (
+                                        <span className="text-white font-bold drop-shadow">
+                                          ✓
+                                        </span>
+                                      )}
+                                    </button>
+                                    {FLUID_COLOR_SWATCHES.slice(1, 5).map(
+                                      (color) => (
+                                        <button
+                                          key={color}
+                                          type="button"
+                                          onClick={() =>
+                                            updateFluidColor(i, color)
+                                          }
+                                          className={[
+                                            "h-5 w-5 rounded-full border transition-all flex items-center justify-center",
+                                            tank.fluidColor === color
+                                              ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
+                                              : "border-black/10 dark:border-white/10 hover:scale-105",
+                                          ].join(" ")}
+                                          style={{ backgroundColor: color }}
+                                          title={color}
+                                        >
+                                          {tank.fluidColor === color && (
+                                            <span className="text-white text-[7px] font-bold drop-shadow">
+                                              ✓
+                                            </span>
+                                          )}
+                                        </button>
+                                      ),
+                                    )}
+                                    <label className="relative h-5 w-5 rounded-full border border-dashed border-black/20 dark:border-white/20 cursor-pointer hover:scale-105 transition-all flex items-center justify-center overflow-hidden">
+                                      <input
+                                        type="color"
+                                        value={
+                                          tank.fluidColor &&
+                                            !FLUID_COLOR_SWATCHES.includes(
+                                              tank.fluidColor,
+                                            )
+                                            ? tank.fluidColor
+                                            : "#22d3ee"
+                                        }
+                                        onChange={(e) =>
+                                          updateFluidColor(i, e.target.value)
+                                        }
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                      />
+                                      {tank.fluidColor &&
+                                        !FLUID_COLOR_SWATCHES.includes(
+                                          tank.fluidColor,
+                                        ) ? (
+                                        <span
+                                          className="h-3 w-3 rounded-full"
+                                          style={{
+                                            backgroundColor: tank.fluidColor,
+                                          }}
+                                        />
+                                      ) : (
+                                        <span className="text-[8px] opacity-40">
+                                          +
+                                        </span>
+                                      )}
+                                    </label>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <span className="opacity-60 block mb-2 font-medium">
+                                    Temp Color
+                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateTempColor(i, undefined)
+                                      }
+                                      className={[
+                                        "h-5 w-5 rounded-full border transition-all flex items-center justify-center text-[7px]",
+                                        !tank.tempColor
+                                          ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
+                                          : "border-black/15 dark:border-white/15 hover:scale-105",
+                                      ].join(" ")}
+                                      style={{ background: "#f59e0b" }}
+                                      title="Default Temp"
+                                    >
+                                      {!tank.tempColor && (
+                                        <span className="text-white font-bold drop-shadow">
+                                          ✓
+                                        </span>
+                                      )}
+                                    </button>
+                                    {FLUID_COLOR_SWATCHES.slice(1, 5).map(
+                                      (color) => (
+                                        <button
+                                          key={color}
+                                          type="button"
+                                          onClick={() =>
+                                            updateTempColor(i, color)
+                                          }
+                                          className={[
+                                            "h-5 w-5 rounded-full border transition-all flex items-center justify-center",
+                                            tank.tempColor === color
+                                              ? "border-black/50 dark:border-white/50 ring-2 ring-black/20 dark:ring-white/20 scale-110"
+                                              : "border-black/10 dark:border-white/10 hover:scale-105",
+                                          ].join(" ")}
+                                          style={{ backgroundColor: color }}
+                                          title={color}
+                                        >
+                                          {tank.tempColor === color && (
+                                            <span className="text-white text-[7px] font-bold drop-shadow">
+                                              ✓
+                                            </span>
+                                          )}
+                                        </button>
+                                      ),
+                                    )}
+                                    <label className="relative h-5 w-5 rounded-full border border-dashed border-black/20 dark:border-white/20 cursor-pointer hover:scale-105 transition-all flex items-center justify-center overflow-hidden">
+                                      <input
+                                        type="color"
+                                        value={
+                                          tank.tempColor &&
+                                            !FLUID_COLOR_SWATCHES.includes(
+                                              tank.tempColor,
+                                            )
+                                            ? tank.tempColor
+                                            : "#f59e0b"
+                                        }
+                                        onChange={(e) =>
+                                          updateTempColor(i, e.target.value)
+                                        }
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                      />
+                                      {tank.tempColor &&
+                                        !FLUID_COLOR_SWATCHES.includes(
+                                          tank.tempColor,
+                                        ) ? (
+                                        <span
+                                          className="h-3 w-3 rounded-full"
+                                          style={{
+                                            backgroundColor: tank.tempColor,
+                                          }}
+                                        />
+                                      ) : (
+                                        <span className="text-[8px] opacity-40">
+                                          +
+                                        </span>
+                                      )}
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-3">
+                                <div
+                                  className={`p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5 ${tank.disableVolume ? "opacity-50 grayscale" : ""}`}
+                                >
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">
+                                      Metric 1 (Vol)
+                                    </span>
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={!!tank.disableVolume}
+                                        onChange={(e) =>
+                                          updateTankField(
+                                            i,
+                                            "disableVolume",
+                                            e.target.checked,
+                                          )
+                                        }
+                                        className="cursor-pointer"
+                                      />
+                                      <span className="text-[10px] opacity-70">
+                                        Disable
+                                      </span>
+                                    </label>
+                                  </div>
+                                  <div
+                                    className={
+                                      tank.disableVolume
+                                        ? "pointer-events-none"
+                                        : ""
+                                    }
+                                  >
+                                    <span className="text-[10px] opacity-60">
+                                      Channel
+                                    </span>
+                                    <select
+                                      value={tank.metrics[0].channel}
+                                      onChange={(e) =>
+                                        updateVolumeMetricField(
+                                          i,
+                                          "channel",
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                    >
+                                      {(availableChannels.length > 0
+                                        ? availableChannels
+                                        : Array.from(
+                                          { length: 24 },
+                                          (_, idx) => `CH${idx + 1}`,
+                                        )
+                                      ).map((ch) => (
+                                        <option key={ch} value={ch}>
+                                          {ch}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div
+                                    className={
+                                      tank.disableVolume
+                                        ? "pointer-events-none"
+                                        : ""
+                                    }
+                                  >
+                                    <span className="text-[10px] opacity-60">
+                                      Unit
+                                    </span>
+                                    <select
+                                      value={tank.metrics[0].unit}
+                                      onChange={(e) =>
+                                        updateVolumeMetricField(
+                                          i,
+                                          "unit",
+                                          e.target.value as VolumeUnit,
+                                        )
+                                      }
+                                      className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                    >
+                                      {VOLUME_UNITS.map((u) => (
+                                        <option key={u} value={u}>
+                                          {u}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div
+                                    className={
+                                      tank.disableVolume
+                                        ? "pointer-events-none"
+                                        : ""
+                                    }
+                                  >
+                                    <span className="text-[10px] opacity-60">
+                                      Input Mode
+                                    </span>
+                                    <select
+                                      value={tank.volumeMode}
+                                      onChange={(e) =>
+                                        updateTankField(
+                                          i,
+                                          "volumeMode",
+                                          e.target.value as MetricMode,
+                                        )
+                                      }
+                                      className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                    >
+                                      <option value="default">
+                                        Default (mA)
+                                      </option>
+                                      <option value="percent">
+                                        Percentage (0-100)
+                                      </option>
+                                      <option value="inverted">
+                                        Inverted (100-0)
+                                      </option>
+                                    </select>
+                                  </div>
+                                  <div
+                                    className={`grid grid-cols-2 gap-2 ${tank.disableVolume ? "pointer-events-none" : ""}`}
+                                  >
+                                    <div>
+                                      <span className="text-[10px] opacity-60">
+                                        Factor M
+                                      </span>
+                                      <input
+                                        type="number"
+                                        step="0.0001"
+                                        value={tank.volumeM ?? 1}
+                                        onChange={(e) =>
+                                          updateTankField(
+                                            i,
+                                            "volumeM",
+                                            Number(e.target.value),
+                                          )
+                                        }
+                                        className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                      />
+                                    </div>
+                                    <div>
+                                      <span className="text-[10px] opacity-60">
+                                        Offset C
+                                      </span>
+                                      <input
+                                        type="number"
+                                        step="0.1"
+                                        value={tank.volumeC ?? 0}
+                                        onChange={(e) =>
+                                          updateTankField(
+                                            i,
+                                            "volumeC",
+                                            Number(e.target.value),
+                                          )
+                                        }
+                                        className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div
+                                  className={`p-3 bg-black/5 dark:bg-white/5 rounded-xl space-y-2 border border-black/5 ${tank.disableTemperature ? "opacity-50 grayscale" : ""}`}
+                                >
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-bold opacity-80 block text-[10px] uppercase tracking-wider">
+                                      Metric 2 (Temp)
+                                    </span>
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={!!tank.disableTemperature}
+                                        onChange={(e) =>
+                                          updateTankField(
+                                            i,
+                                            "disableTemperature",
+                                            e.target.checked,
+                                          )
+                                        }
+                                        className="cursor-pointer"
+                                      />
+                                      <span className="text-[10px] opacity-70">
+                                        Disable
+                                      </span>
+                                    </label>
+                                  </div>
+                                  <div
+                                    className={
+                                      tank.disableTemperature
+                                        ? "pointer-events-none"
+                                        : ""
+                                    }
+                                  >
+                                    <span className="text-[10px] opacity-60">
+                                      Channel
+                                    </span>
+                                    <select
+                                      value={tank.metrics[1].channel}
+                                      onChange={(e) =>
+                                        updateTemperatureMetricField(
+                                          i,
+                                          "channel",
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                    >
+                                      {(availableChannels.length > 0
+                                        ? availableChannels
+                                        : Array.from(
+                                          { length: 24 },
+                                          (_, idx) => `CH${idx + 1}`,
+                                        )
+                                      ).map((ch) => (
+                                        <option key={ch} value={ch}>
+                                          {ch}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div
+                                    className={
+                                      tank.disableTemperature
+                                        ? "pointer-events-none"
+                                        : ""
+                                    }
+                                  >
+                                    <span className="text-[10px] opacity-60">
+                                      Unit
+                                    </span>
+                                    <select
+                                      value={tank.metrics[1].unit}
+                                      onChange={(e) =>
+                                        updateTemperatureMetricField(
+                                          i,
+                                          "unit",
+                                          e.target.value as TemperatureUnit,
+                                        )
+                                      }
+                                      className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                    >
+                                      {TEMPERATURE_UNITS.map((u) => (
+                                        <option key={u} value={u}>
+                                          {u}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div
+                                    className={
+                                      tank.disableTemperature
+                                        ? "pointer-events-none"
+                                        : ""
+                                    }
+                                  >
+                                    <span className="text-[10px] opacity-60">
+                                      Input Mode
+                                    </span>
+                                    <select
+                                      value={tank.temperatureMode}
+                                      onChange={(e) =>
+                                        updateTankField(
+                                          i,
+                                          "temperatureMode",
+                                          e.target.value as MetricMode,
+                                        )
+                                      }
+                                      className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                    >
+                                      <option value="default">
+                                        Default (mA)
+                                      </option>
+                                      <option value="percent">
+                                        Percentage (0-100)
+                                      </option>
+                                      <option value="inverted">
+                                        Inverted (100-0)
+                                      </option>
+                                    </select>
+                                  </div>
+                                  <div
+                                    className={`grid grid-cols-2 gap-2 ${tank.disableTemperature ? "pointer-events-none" : ""}`}
+                                  >
+                                    <div>
+                                      <span className="text-[10px] opacity-60">
+                                        Factor M
+                                      </span>
+                                      <input
+                                        type="number"
+                                        step="0.0001"
+                                        value={tank.temperatureM ?? 1}
+                                        onChange={(e) =>
+                                          updateTankField(
+                                            i,
+                                            "temperatureM",
+                                            Number(e.target.value),
+                                          )
+                                        }
+                                        className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                      />
+                                    </div>
+                                    <div>
+                                      <span className="text-[10px] opacity-60">
+                                        Offset C
+                                      </span>
+                                      <input
+                                        type="number"
+                                        step="0.1"
+                                        value={tank.temperatureC_factor ?? 0}
+                                        onChange={(e) =>
+                                          updateTankField(
+                                            i,
+                                            "temperatureC_factor",
+                                            Number(e.target.value),
+                                          )
+                                        }
+                                        className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div>
+                                <span className="opacity-60 block mb-2 font-medium">
+                                  Alarm Limits (Thresholds)
+                                </span>
+                                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                                  <div className="space-y-1">
+                                    <span className="text-[10px] opacity-50 flex justify-between">
+                                      Min Volume{" "}
+                                      <span>({tank.metrics[0].unit})</span>
+                                    </span>
+                                    <input
+                                      value={
+                                        typeof lim.minVolumeL === "number"
+                                          ? String(lim.minVolumeL)
+                                          : ""
+                                      }
+                                      onChange={(e) =>
+                                        updateTankLimit(i, {
+                                          minVolumeL: numOrUndef(e.target.value),
+                                        })
+                                      }
+                                      placeholder="N/A"
+                                      className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="text-[10px] opacity-50 flex justify-between">
+                                      Max Volume{" "}
+                                      <span>({tank.metrics[0].unit})</span>
+                                    </span>
+                                    <input
+                                      value={
+                                        typeof lim.maxVolumeL === "number"
+                                          ? String(lim.maxVolumeL)
+                                          : ""
+                                      }
+                                      onChange={(e) =>
+                                        updateTankLimit(i, {
+                                          maxVolumeL: numOrUndef(e.target.value),
+                                        })
+                                      }
+                                      placeholder="N/A"
+                                      className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="text-[10px] opacity-50 flex justify-between">
+                                      Min Temp{" "}
+                                      <span>({tank.metrics[1].unit})</span>
+                                    </span>
+                                    <input
+                                      value={
+                                        typeof lim.minTempC === "number"
+                                          ? String(lim.minTempC)
+                                          : ""
+                                      }
+                                      onChange={(e) =>
+                                        updateTankLimit(i, {
+                                          minTempC: numOrUndef(e.target.value),
+                                        })
+                                      }
+                                      placeholder="N/A"
+                                      className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="text-[10px] opacity-50 flex justify-between">
+                                      Max Temp{" "}
+                                      <span>({tank.metrics[1].unit})</span>
+                                    </span>
+                                    <input
+                                      value={
+                                        typeof lim.maxTempC === "number"
+                                          ? String(lim.maxTempC)
+                                          : ""
+                                      }
+                                      onChange={(e) =>
+                                        updateTankLimit(i, {
+                                          maxTempC: numOrUndef(e.target.value),
+                                        })
+                                      }
+                                      placeholder="N/A"
+                                      className="w-full border border-black/5 rounded-lg px-2 py-1 bg-black/5 dark:bg-black/10 outline-none backdrop-blur-sm"
+                                    />
+                                  </div>
+                                </div>
+                                {/* Inline threshold validation error */}
+                                {thresholdError && (
+                                  <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-[10px] text-red-600 dark:text-red-300 font-medium">
+                                    {thresholdError}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-6">
+                    {loadingUsers ? (
+                      <div className="py-20 text-center opacity-50">
+                        Loading users...
+                      </div>
+                    ) : users.length === 0 ? (
+                      <div className="py-20 text-center opacity-50">
+                        No sub-users created yet.
+                      </div>
+                    ) : (
+                      <div className="overflow-hidden rounded-2xl border border-black/10 dark:border-white/10">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-black/5 dark:bg-white/5 font-bold">
+                            <tr>
+                              <th className="px-6 py-4">Full Name</th>
+                              <th className="px-6 py-4">Username</th>
+                              <th className="px-6 py-4">Tanks Access</th>
+                              <th className="px-6 py-4">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-black/5 dark:divide-white/5">
+                            {users.map((u) => (
+                              <tr
+                                key={u.id}
+                                className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition"
+                              >
+                                <td className="px-6 py-4">
+                                  {u.full_name || "--"}
+                                </td>
+                                <td className="px-6 py-4 font-medium">
+                                  {u.username}
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="flex flex-wrap gap-1">
+                                    {u.permissions?.length ? (
+                                      u.permissions.map((p: any) => {
+                                        const tankIndex =
+                                          parseInt(
+                                            p.tankKey.replace("Tank ", ""),
+                                          ) - 1;
+                                        const tank = setupTanks[tankIndex];
+                                        const displayName =
+                                          tank?.name || p.tankKey;
+                                        return (
+                                          <span
+                                            key={p.tankKey}
+                                            className={`text-[10px] px-2 py-0.5 rounded-full border ${p.accessLevel === "edit" ? "bg-blue-500/10 border-blue-500/30 text-blue-600" : "bg-black/5 border-black/10 opacity-60"}`}
+                                          >
+                                            {displayName} ({p.accessLevel})
+                                          </span>
+                                        );
+                                      })
+                                    ) : (
+                                      <span className="text-[10px] opacity-40 italic">
+                                        No access
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="flex gap-3">
+                                    <button
+                                      onClick={() => openEditUser(u)}
+                                      className="text-blue-500 hover:text-blue-700 transition font-bold text-xs"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteUser(u.id)}
+                                      className="text-red-500 hover:text-red-700 transition font-bold text-xs"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </section>
+
+        {showAddUserModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowAddUserModal(false)}
+            />
+            <div className="relative w-full max-w-lg rounded-3xl border border-black/10 bg-white p-8 shadow-2xl dark:border-white/10 dark:bg-[#1a1a1a]">
+              <h3 className="text-xl font-bold mb-6">
+                {editingUserId ? "Edit Sub-User" : "Add New Sub-User"}
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold opacity-50 mb-1 uppercase tracking-wider">
+                    Full Name
+                  </label>
+                  <input
+                    value={newUserData.fullName}
+                    onChange={(e) =>
+                      setNewUserData((prev) => ({
+                        ...prev,
+                        fullName: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-black/10 bg-black/5 px-4 py-3 outline-none dark:bg-white/5 focus:ring-2 ring-blue-500/20 transition-all"
+                    placeholder="e.g. John Doe"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold opacity-50 mb-1 uppercase tracking-wider">
+                      Username
+                    </label>
+                    <input
+                      value={newUserData.username}
+                      onChange={(e) =>
+                        setNewUserData((prev) => ({
+                          ...prev,
+                          username: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-black/10 bg-black/5 px-4 py-3 outline-none dark:bg-white/5 focus:ring-2 ring-blue-500/20 transition-all"
+                      placeholder="john_doe"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold opacity-50 mb-1 uppercase tracking-wider">
+                      Password
+                    </label>
+                    <PasswordInput
+                      value={newUserData.password}
+                      onChange={(val) =>
+                        setNewUserData((prev) => ({ ...prev, password: val }))
+                      }
+                      className="!py-3 !text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold opacity-50 mb-3 uppercase tracking-wider">
+                    Assign Tank Permissions
+                  </label>
+                  <div className="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar text-black dark:text-white">
+                    {setupTanks.map((t, i) => {
+                      const key = tankKey(i);
+                      const perm = newUserData.permissions.find(
+                        (p) => p.tankKey === key,
+                      );
+                      return (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between p-3 rounded-xl border border-black/5 bg-black/5 dark:bg-white/5"
+                        >
+                          <span className="text-sm font-medium">{t.name}</span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => togglePermission(key, "view")}
+                              className={`px-3 py-1 rounded-lg text-[10px] font-bold border transition ${perm?.accessLevel === "view" ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white" : "border-black/10 opacity-50 hover:opacity-100"}`}
+                            >
+                              View
+                            </button>
+                            <button
+                              onClick={() => togglePermission(key, "edit")}
+                              className={`px-3 py-1 rounded-lg text-[10px] font-bold border transition ${perm?.accessLevel === "edit" ? "bg-blue-600 text-white border-blue-600" : "border-black/10 opacity-50 hover:opacity-100"}`}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => {
+                      setShowAddUserModal(false);
+                      setEditingUserId(null);
+                    }}
+                    className="flex-1 rounded-xl border border-black/10 py-3 font-bold opacity-60 hover:opacity-100 transition text-black dark:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddUser}
+                    className="flex-1 rounded-xl bg-black py-3 font-bold text-white dark:bg-white dark:text-black shadow-lg hover:opacity-90 transition active:scale-95"
+                  >
+                    {editingUserId ? "Update User" : "Create User"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );

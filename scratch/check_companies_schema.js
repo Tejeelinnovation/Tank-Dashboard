@@ -10,7 +10,7 @@ async function checkSchema() {
     const res = await pool.query(`
       SELECT column_name, data_type 
       FROM information_schema.columns 
-      WHERE table_name = 'tank_alarm_history'
+      WHERE table_name = 'companies' AND column_name = 'id'
     `);
     console.log(JSON.stringify(res.rows, null, 2));
   } catch (err) {

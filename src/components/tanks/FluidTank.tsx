@@ -1,7 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { motion, useMotionValue, animate, useAnimationFrame } from "framer-motion";
+import {
+  motion,
+  useMotionValue,
+  animate,
+  useAnimationFrame,
+} from "framer-motion";
 
 type Variant = "rect" | "cylinder";
 type Surface = "wave" | "flat";
@@ -23,27 +28,25 @@ type FluidTankProps = {
   fluidColor?: string;
 };
 
-/**
- * Parse a hex color (e.g. "#22d3ee") into [r, g, b] values.
- */
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace(/^#/, "");
-  const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
+  const n = parseInt(
+    h.length === 3 ? h.split("").map((c) => c + c).join("") : h,
+    16,
+  );
+
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/**
- * Create an rgba string from hex + alpha.
- */
 function hexToRgba(hex: string, alpha: number): string {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/**
- * Lighten an rgb color by mixing with white.
- */
-function lighten(rgb: [number, number, number], amount: number): [number, number, number] {
+function lighten(
+  rgb: [number, number, number],
+  amount: number,
+): [number, number, number] {
   return [
     Math.round(rgb[0] + (255 - rgb[0]) * amount),
     Math.round(rgb[1] + (255 - rgb[1]) * amount),
@@ -51,10 +54,10 @@ function lighten(rgb: [number, number, number], amount: number): [number, number
   ];
 }
 
-/**
- * Darken an rgb color by mixing with black.
- */
-function darken(rgb: [number, number, number], amount: number): [number, number, number] {
+function darken(
+  rgb: [number, number, number],
+  amount: number,
+): [number, number, number] {
   return [
     Math.round(rgb[0] * (1 - amount)),
     Math.round(rgb[1] * (1 - amount)),
@@ -68,20 +71,17 @@ function clamp(n: number, min: number, max: number) {
 
 function formatDisplayValue(value: number, unitLabel: string) {
   if (!Number.isFinite(value)) return `-- ${unitLabel}`;
-  const digits =
-    unitLabel === "m³" || unitLabel === "KL"
-      ? 2
-      : unitLabel === "%"
-      ? 1
-      : 1;
+
+  const digits = unitLabel === "m³" || unitLabel === "KL" ? 2 : 1;
+
   return `${value.toFixed(digits)} ${unitLabel}`;
 }
 
 export default function FluidTank({
   level,
   variant = "rect",
-  width = 220,
-  height = 260,
+  width = 350,
+  height = 420,
   smoothMs = 1200,
   capacityLiters = 1000,
   unit = "L",
@@ -92,22 +92,24 @@ export default function FluidTank({
   accent = "volume",
   fluidColor,
 }: FluidTankProps) {
-  const pad = 12;
+  const pad = 14;
   const innerW = width - pad * 2;
   const innerH = height - pad * 2;
 
   const isCylinder = variant === "cylinder";
-  const outerRx = isCylinder ? 22 : 18;
-  const innerRx = isCylinder ? 18 : 14;
+  const outerRx = isCylinder ? 24 : 20;
+  const innerRx = isCylinder ? 20 : 16;
 
   const mvLevel = useMotionValue(clamp(level, 0, 100));
 
   React.useEffect(() => {
     const target = clamp(level, 0, 100);
+
     const controls = animate(mvLevel, target, {
       duration: smoothMs / 1000,
       ease: [0.22, 1, 0.36, 1],
     });
+
     return () => controls.stop();
   }, [level, mvLevel, smoothMs]);
 
@@ -140,6 +142,7 @@ export default function FluidTank({
     const x0 = pad;
     const x1 = pad + innerW;
     const yBottom = pad + innerH;
+
     return `M ${x0} ${topY} L ${x1} ${topY} L ${x1} ${yBottom} L ${x0} ${yBottom} Z`;
   };
 
@@ -158,18 +161,22 @@ export default function FluidTank({
       const xMid = x0 + waveLen / 2;
       const x1 = x0 + waveLen;
 
-      d += `C ${x0 + waveLen * 0.25} ${topY - amp}, ${x0 + waveLen * 0.25} ${topY - amp}, ${xMid} ${topY} `;
-      d += `C ${x0 + waveLen * 0.75} ${topY + amp}, ${x0 + waveLen * 0.75} ${topY + amp}, ${x1} ${topY} `;
+      d += `C ${x0 + waveLen * 0.25} ${topY - amp}, ${x0 + waveLen * 0.25
+        } ${topY - amp}, ${xMid} ${topY} `;
+
+      d += `C ${x0 + waveLen * 0.75} ${topY + amp}, ${x0 + waveLen * 0.75
+        } ${topY + amp}, ${x1} ${topY} `;
     }
 
-    d += `L ${pad + endX} ${pad + innerH} L ${pad + startX} ${pad + innerH} Z`;
+    d += `L ${pad + endX} ${pad + innerH} L ${pad + startX
+      } ${pad + innerH} Z`;
+
     return d;
   };
 
-  // Performance Optimization: Throttle path updates to reduce React re-renders
   const lastUpdateRef = React.useRef(0);
+
   useAnimationFrame((t) => {
-    // Limit updates to ~20fps (every 50ms) to save CPU/battery
     if (t - lastUpdateRef.current < 50) return;
     lastUpdateRef.current = t;
 
@@ -193,43 +200,47 @@ export default function FluidTank({
     setFrontD(buildWavePath(topY, phase, waveAmp));
   });
 
-  // Compute custom fluid color gradients if provided
-  const hasCustomColor = typeof fluidColor === "string" && /^#[0-9a-fA-F]{3,8}$/.test(fluidColor);
+  const hasCustomColor =
+    typeof fluidColor === "string" &&
+    /^#[0-9a-fA-F]{3,8}$/.test(fluidColor);
+
   const customRgb = hasCustomColor ? hexToRgb(fluidColor) : null;
 
   const fillStyleToUse = alarm
     ? `url(#${alarmGradId})`
     : accent === "temperature"
-    ? `url(#${tempGradId})`
-    : `url(#${liquidGradId})`;
+      ? `url(#${tempGradId})`
+      : `url(#${liquidGradId})`;
 
   const outerStroke = alarm
     ? "rgba(255,90,90,0.90)"
     : hasCustomColor
-    ? hexToRgba(fluidColor!, 0.34)
-    : accent === "temperature"
-    ? "rgba(255,165,90,0.42)"
-    : "rgba(135,225,255,0.34)";
+      ? hexToRgba(fluidColor!, 0.34)
+      : accent === "temperature"
+        ? "rgba(255,165,90,0.42)"
+        : "rgba(135,225,255,0.34)";
 
   const innerStroke = alarm
     ? "rgba(255,70,70,0.85)"
     : hasCustomColor
-    ? hexToRgba(fluidColor!, 0.30)
-    : accent === "temperature"
-    ? "rgba(255,160,90,0.36)"
-    : "rgba(120,220,255,0.30)";
+      ? hexToRgba(fluidColor!, 0.30)
+      : accent === "temperature"
+        ? "rgba(255,160,90,0.36)"
+        : "rgba(120,220,255,0.30)";
 
-  // Badge accent for the pill overlay
   const badgeClass = alarm
-    ? "border-red-300/60 bg-red-500/28 shadow-[0_0_18px_rgba(255,70,70,0.28)]"
+    ? "border-red-300/60 bg-red-500/40 shadow-[0_0_18px_rgba(255,70,70,0.28)]"
     : hasCustomColor
-    ? "border-white/25 bg-black/18"
-    : accent === "temperature"
-    ? "border-orange-300/35 bg-orange-400/18"
-    : "border-cyan-300/30 bg-cyan-300/18";
+      ? "border-white/25 bg-black/30"
+      : accent === "temperature"
+        ? "border-orange-300/35 bg-orange-400/25"
+        : "border-cyan-300/30 bg-cyan-300/25";
 
   return (
-    <div className="relative select-none">
+    <div
+      className="relative mx-auto select-none"
+      style={{ width, height }}
+    >
       <svg width={width} height={height} className="block overflow-visible">
         <defs>
           <filter id={glowId}>
@@ -262,9 +273,22 @@ export default function FluidTank({
           <linearGradient id={liquidGradId} x1="0" y1="0" x2="0" y2="1">
             {hasCustomColor && customRgb ? (
               <>
-                <stop offset="0%" stopColor={`rgba(${lighten(customRgb, 0.35).join(",")},0.98)`} />
-                <stop offset="40%" stopColor={`rgba(${customRgb.join(",")},0.92)`} />
-                <stop offset="100%" stopColor={`rgba(${darken(customRgb, 0.35).join(",")},0.86)`} />
+                <stop
+                  offset="0%"
+                  stopColor={`rgba(${lighten(customRgb, 0.35).join(
+                    ",",
+                  )},0.98)`}
+                />
+                <stop
+                  offset="40%"
+                  stopColor={`rgba(${customRgb.join(",")},0.92)`}
+                />
+                <stop
+                  offset="100%"
+                  stopColor={`rgba(${darken(customRgb, 0.35).join(
+                    ",",
+                  )},0.86)`}
+                />
               </>
             ) : (
               <>
@@ -278,15 +302,28 @@ export default function FluidTank({
           <linearGradient id={tempGradId} x1="0" y1="0" x2="0" y2="1">
             {hasCustomColor && customRgb && accent === "temperature" ? (
               <>
-                <stop offset="0%" stopColor={`rgba(${lighten(customRgb, 0.35).join(",")},0.98)`} />
-                <stop offset="45%" stopColor={`rgba(${customRgb.join(",")},0.92)`} />
-                <stop offset="100%" stopColor={`rgba(${darken(customRgb, 0.35).join(",")},0.86)`} />
+                <stop
+                  offset="0%"
+                  stopColor={`rgba(${lighten(customRgb, 0.35).join(
+                    ",",
+                  )},0.98)`}
+                />
+                <stop
+                  offset="45%"
+                  stopColor={`rgba(${customRgb.join(",")},0.92)`}
+                />
+                <stop
+                  offset="100%"
+                  stopColor={`rgba(${darken(customRgb, 0.35).join(
+                    ",",
+                  )},0.86)`}
+                />
               </>
             ) : (
               <>
                 <stop offset="0%" stopColor="rgba(255,210,90,0.98)" />
-                <stop offset="45%" stopColor="rgba(255, 203, 100, 0.92)" />
-                <stop offset="100%" stopColor="rgba(255, 160, 65, 0.84)" />
+                <stop offset="45%" stopColor="rgba(255,203,100,0.92)" />
+                <stop offset="100%" stopColor="rgba(255,160,65,0.84)" />
               </>
             )}
           </linearGradient>
@@ -305,7 +342,13 @@ export default function FluidTank({
           </linearGradient>
 
           <clipPath id={clipId}>
-            <rect x={pad} y={pad} width={innerW} height={innerH} rx={innerRx} />
+            <rect
+              x={pad}
+              y={pad}
+              width={innerW}
+              height={innerH}
+              rx={innerRx}
+            />
           </clipPath>
         </defs>
 
@@ -365,15 +408,24 @@ export default function FluidTank({
             r="2.4"
             fill="rgba(255,255,255,0.72)"
             animate={{ y: [0, -12, 0], opacity: [0.22, 0.72, 0.22] }}
-            transition={{ duration: 3.1, repeat: Infinity, ease: "easeInOut" }}
+            transition={{
+              duration: 3.1,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
           />
+
           <motion.circle
             cx={pad + innerW * 0.32}
             cy={pad + innerH * 0.35}
             r="1.7"
             fill="rgba(255,255,255,0.58)"
             animate={{ y: [0, -14, 0], opacity: [0.16, 0.60, 0.16] }}
-            transition={{ duration: 3.9, repeat: Infinity, ease: "easeInOut" }}
+            transition={{
+              duration: 3.9,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
           />
 
           <rect
@@ -388,10 +440,17 @@ export default function FluidTank({
         </g>
       </svg>
 
-      <div className="absolute inset-0 flex items-center justify-center">
+      <div
+        className="absolute z-20"
+        style={{
+          left: width / 2,
+          top: height / 2,
+          transform: "translate(-50%, -50%)",
+        }}
+      >
         <div
           className={[
-            "rounded-full border px-3 py-1 text-xs font-semibold text-white backdrop-blur",
+            "max-w-[140px] truncate rounded-full border px-4 py-1.5 text-sm font-bold text-white shadow-2xl backdrop-blur-xl",
             badgeClass,
           ].join(" ")}
         >

@@ -5,20 +5,20 @@ import FluidTank from "./FluidTankClient";
 import TankHistoryChart from "./TankHistoryChart";
 import type { Tank } from "./TankGrid";
 import type { TankAlarmLimits } from "@/types/alarm";
-import { 
-  type VolumeUnit, 
-  type TemperatureUnit,
+import {
   convertFromLiters,
   convertTemperature,
   convertMaToLiters,
-  convertToLiters
 } from "@/lib/conversions";
-import { 
-  normalizeLevelPercent, 
-  currentVolumeL, 
+import {
+  normalizeLevelPercent,
+  currentVolumeL,
   getTankAlarmReasons,
-  pickAlarmLimits as pickLimits
+  pickAlarmLimits as pickLimits,
 } from "@/lib/alarm";
+import { Download, FileText, X } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 type TankMetric = "volume" | "temperature";
 
@@ -27,6 +27,12 @@ type ChartPoint = {
   value: number | null;
   alarm: boolean;
   timestamp: number;
+
+  // Original sensor timestamp. Used by tooltip.
+  actualTimestamp?: number;
+
+  // True when previous value is carried into selected range start.
+  carriedForward?: boolean;
 };
 
 function toDateInputValue(d: Date) {
@@ -56,6 +62,63 @@ function roundForUnit(value: number, unitLabel: string) {
     return Math.round(value * 10) / 10;
   }
   return Math.round(value);
+}
+
+function formatPointLabel(timestamp: number, resolution: "daily" | "time") {
+  const d = new Date(timestamp);
+
+  if (resolution === "time") {
+    return d.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return d.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function insertNullGaps(
+  points: ChartPoint[],
+  resolution: "daily" | "time"
+): ChartPoint[] {
+  const sorted = [...points].sort((a, b) => a.timestamp - b.timestamp);
+
+  const expectedGapMs =
+    resolution === "time"
+      ? 60 * 1000
+      : 60 * 60 * 1000;
+
+  const gapToleranceMs = expectedGapMs * 1.5;
+
+  const withGaps: ChartPoint[] = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const current = sorted[i];
+    withGaps.push(current);
+
+    const next = sorted[i + 1];
+    if (!next) continue;
+
+    if (
+      typeof current.value === "number" &&
+      typeof next.value === "number" &&
+      next.timestamp - current.timestamp > gapToleranceMs
+    ) {
+      withGaps.push({
+        date: "",
+        value: null,
+        alarm: false,
+        timestamp: current.timestamp + 1,
+      });
+    }
+  }
+
+  return withGaps;
 }
 
 export default function TankDetailsModal({
@@ -118,10 +181,14 @@ export default function TankDetailsModal({
 
   React.useEffect(() => {
     if (!open) return;
+
     setMetric(tank?.disableVolume && !tank?.disableTemperature ? "temperature" : "volume");
+    setResolution("daily");
+    setStartTimeStr("00:00");
+    setEndTimeStr("23:59");
     setStartStr(toDateInputValue(defaultStart));
     setEndStr(toDateInputValue(today));
-  }, [open, tankId, defaultStart, today]);
+  }, [open, tankId, defaultStart, today, tank?.disableVolume, tank?.disableTemperature]);
 
   const limits = React.useMemo(() => {
     if (!tank) return undefined;
@@ -136,8 +203,8 @@ export default function TankDetailsModal({
   }, [tank, limits]);
 
   const alarmNow = alarmReasons.length > 0;
-  const volumeAlarmNow = alarmReasons.some(r => r.includes("Volume"));
-  const temperatureAlarmNow = alarmReasons.some(r => r.includes("Temp"));
+  const volumeAlarmNow = alarmReasons.some((r) => r.includes("Volume"));
+  const temperatureAlarmNow = alarmReasons.some((r) => r.includes("Temp"));
 
   const selectedDisplay = React.useMemo(() => {
     if (!tank) {
@@ -155,13 +222,13 @@ export default function TankDetailsModal({
         typeof tank.volumeValue === "number"
           ? tank.volumeValue
           : roundForUnit(
-              convertFromLiters(
-                currentVolumeLiters,
-                label,
-                tank.capacityLiters ?? 1000
-              ),
-              label
-            );
+            convertFromLiters(
+              currentVolumeLiters,
+              label,
+              tank.capacityLiters ?? 1000
+            ),
+            label
+          );
 
       return {
         label,
@@ -190,33 +257,35 @@ export default function TankDetailsModal({
 
     if (metric === "volume") {
       const unit = tank.volumeUnit ?? "L";
+
       return {
         min:
           typeof limits.minVolumeL === "number"
             ? roundForUnit(
-                convertFromLiters(
-                  limits.minVolumeL,
-                  unit,
-                  tank.capacityLiters ?? 1000
-                ),
-                unit
-              )
+              convertFromLiters(
+                limits.minVolumeL,
+                unit,
+                tank.capacityLiters ?? 1000
+              ),
+              unit
+            )
             : undefined,
         max:
           typeof limits.maxVolumeL === "number"
             ? roundForUnit(
-                convertFromLiters(
-                  limits.maxVolumeL,
-                  unit,
-                  tank.capacityLiters ?? 1000
-                ),
-                unit
-              )
+              convertFromLiters(
+                limits.maxVolumeL,
+                unit,
+                tank.capacityLiters ?? 1000
+              ),
+              unit
+            )
             : undefined,
       };
     }
 
     const unit = tank.temperatureUnit ?? "°C";
+
     return {
       min:
         typeof limits.minTempC === "number"
@@ -231,16 +300,21 @@ export default function TankDetailsModal({
 
   const chartXDomain = React.useMemo(() => {
     const start = parseDateInput(startStr);
-    const end = parseDateInput(endStr);
 
     if (resolution === "time") {
-      const [sh, sm] = startTimeStr.split(':').map(Number);
+      const end = parseDateInput(startStr);
+
+      const [sh, sm] = startTimeStr.split(":").map(Number);
+      const [eh, em] = endTimeStr.split(":").map(Number);
+
       start.setHours(sh || 0, sm || 0, 0, 0);
-      const [eh, em] = endTimeStr.split(':').map(Number);
       end.setHours(eh || 23, em || 59, 59, 999);
-    } else {
-      end.setDate(end.getDate() + 1);
+
+      return [start.getTime(), end.getTime()] as [number, number];
     }
+
+    const end = parseDateInput(endStr);
+    end.setDate(end.getDate() + 1);
 
     return [start.getTime(), end.getTime()] as [number, number];
   }, [startStr, endStr, startTimeStr, endTimeStr, resolution]);
@@ -251,7 +325,9 @@ export default function TankDetailsModal({
     async function loadHistory() {
       const tnk = tank;
       if (!open || !tnk) return;
+
       const channel = metric === "volume" ? tnk.volumeChannel : tnk.temperatureChannel;
+
       if (!channel) {
         if (!cancelled) {
           setHistory([]);
@@ -262,13 +338,13 @@ export default function TankDetailsModal({
       }
 
       const start = parseDateInput(startStr);
-      const stop = parseDateInput(endStr);
+      const stop = resolution === "time" ? parseDateInput(startStr) : parseDateInput(endStr);
 
       if (resolution === "time") {
-        const [sh, sm] = startTimeStr.split(':').map(Number);
+        const [sh, sm] = startTimeStr.split(":").map(Number);
+        const [eh, em] = endTimeStr.split(":").map(Number);
+
         start.setHours(sh || 0, sm || 0, 0, 0);
-        const [eh, em] = endTimeStr.split(':').map(Number);
-        stop.setTime(start.getTime()); // Same day
         stop.setHours(eh || 23, em || 59, 59, 999);
       } else {
         stop.setDate(stop.getDate() + 1);
@@ -297,9 +373,13 @@ export default function TankDetailsModal({
             { cache: "no-store" }
           ),
           fetch(
-            `/api/alarms/history?slug=${tnk.companySlug || ""}&tankKey=${encodeURIComponent(tnk.tankKey || "")}&start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(stop.toISOString())}`,
+            `/api/alarms/history?slug=${tnk.companySlug || ""}&tankKey=${encodeURIComponent(
+              tnk.tankKey || ""
+            )}&start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(
+              stop.toISOString()
+            )}`,
             { cache: "no-store" }
-          )
+          ),
         ]);
 
         const j = await res.json().catch(() => ({}));
@@ -318,28 +398,40 @@ export default function TankDetailsModal({
         const alarmsHistoryRows = Array.isArray(aj?.rows) ? aj.rows : [];
         const capacity = tnk.capacityLiters ?? 1000;
 
-        const mapped: any[] = rows.map((r: any) => {
+        const mapInfluxRowToPoint = (r: any): ChartPoint => {
           const t = new Date(r._time).getTime();
-          const date = resolution === "time"
-            ? new Date(r._time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : String(r?._time ?? "").slice(0, 10);
-          
-          const raw = r?._value !== null ? Number(r._value) : null;
+          const date = formatPointLabel(t, resolution);
+
+          const raw =
+            r?._value !== null && r?._value !== undefined
+              ? Number(r._value)
+              : null;
 
           if (raw === null || !Number.isFinite(raw)) {
-            return { date, value: null, alarm: false, timestamp: t };
+            return {
+              date,
+              value: null,
+              alarm: false,
+              timestamp: t,
+              actualTimestamp: t,
+            };
           }
 
           const hasHistoricalAlarm = alarmsHistoryRows.some((ar: any) => {
             const art = new Date(ar.created_at).getTime();
             const metricMatch = ar.metric === metric;
-            return metricMatch && Math.abs(art - t) < (resolution === "time" ? 1800000 : 43200000);
+
+            return (
+              metricMatch &&
+              Math.abs(art - t) < (resolution === "time" ? 1800000 : 43200000)
+            );
           });
 
           if (metric === "volume") {
             const unit = tnk.volumeUnit ?? "L";
+
             let liters = convertMaToLiters(raw, capacity, tnk.volumeMode);
-            liters = (liters * (tnk.volumeM ?? 1.0)) + (tnk.volumeC ?? 0.0);
+            liters = liters * (tnk.volumeM ?? 1.0) + (tnk.volumeC ?? 0.0);
 
             const displayValue = roundForUnit(
               convertFromLiters(liters, unit, capacity),
@@ -350,16 +442,18 @@ export default function TankDetailsModal({
               date,
               value: displayValue,
               timestamp: t,
+              actualTimestamp: t,
               alarm:
                 hasHistoricalAlarm ||
                 (!!limits &&
-                ((typeof limits.minVolumeL === "number" && liters < limits.minVolumeL) ||
-                  (typeof limits.maxVolumeL === "number" && liters > limits.maxVolumeL))),
+                  ((typeof limits.minVolumeL === "number" && liters < limits.minVolumeL) ||
+                    (typeof limits.maxVolumeL === "number" && liters > limits.maxVolumeL))),
             };
           }
 
           const unit = tnk.temperatureUnit ?? "°C";
           let tempC = 0;
+
           if (tnk.temperatureMode === "percent") {
             tempC = raw;
           } else if (tnk.temperatureMode === "inverted") {
@@ -368,7 +462,7 @@ export default function TankDetailsModal({
             tempC = convertTemperature(raw, unit, "°C");
           }
 
-          tempC = (tempC * (tnk.temperatureM ?? 1.0)) + (tnk.temperatureC_factor ?? 0.0);
+          tempC = tempC * (tnk.temperatureM ?? 1.0) + (tnk.temperatureC_factor ?? 0.0);
 
           const displayValue =
             unit === "°F"
@@ -379,46 +473,86 @@ export default function TankDetailsModal({
             date,
             value: displayValue,
             timestamp: t,
+            actualTimestamp: t,
             alarm:
               hasHistoricalAlarm ||
               (!!limits &&
-              ((typeof limits.minTempC === "number" && tempC < limits.minTempC) ||
-                (typeof limits.maxTempC === "number" && tempC > limits.maxTempC))),
+                ((typeof limits.minTempC === "number" && tempC < limits.minTempC) ||
+                  (typeof limits.maxTempC === "number" && tempC > limits.maxTempC))),
           };
+        };
+
+        let mapped: ChartPoint[] = rows.map(mapInfluxRowToPoint);
+
+        const rangeStart = start.getTime();
+        const rangeEnd = stop.getTime();
+
+        const previousPoint = [...mapped]
+          .filter((p) => p.timestamp < rangeStart && typeof p.value === "number")
+          .sort((a, b) => b.timestamp - a.timestamp)[0];
+
+        const inRangePoints = mapped.filter(
+          (p) => p.timestamp >= rangeStart && p.timestamp <= rangeEnd
+        );
+
+        const hasRealValueInsideRange = inRangePoints.some(
+          (p) => typeof p.value === "number"
+        );
+
+        if (resolution === "time") {
+          if (previousPoint && hasRealValueInsideRange) {
+            mapped = [
+              {
+                ...previousPoint,
+                date: formatPointLabel(rangeStart, resolution),
+                actualTimestamp: previousPoint.actualTimestamp ?? previousPoint.timestamp,
+                carriedForward: true,
+                timestamp: rangeStart,
+              },
+              ...inRangePoints,
+            ];
+          } else {
+            mapped = inRangePoints;
+          }
+        } else {
+          mapped = inRangePoints;
+        }
+
+        mapped = insertNullGaps(mapped, resolution);
+
+        console.log("========== MODAL HISTORY MAPPED ==========");
+        console.log({
+          metric,
+          resolution,
+          channel,
+          start: start.toISOString(),
+          stop: stop.toISOString(),
+          rawRows: rows.length,
+          mappedRows: mapped.length,
+          hasRealValueInsideRange,
+          previousPoint: previousPoint ?? null,
         });
+        console.table(
+          mapped.map((p) => ({
+            date: p.date,
+            value: p.value,
+            chartTime: new Date(p.timestamp).toLocaleString(),
+            actualTime: p.actualTimestamp
+              ? new Date(p.actualTimestamp).toLocaleString()
+              : "",
+            carriedForward: p.carriedForward,
+          }))
+        );
+        console.log("=========================================");
 
         if (!cancelled) {
-          let finalData = mapped;
-          
-          // Inject nulls for gaps > 15 mins in time-based mode
-          if (resolution === "time" && mapped.length > 1) {
-            const withGaps: any[] = [];
-            const GAP_THRESHOLD = 15 * 60 * 1000; // 15 minutes
-
-            for (let i = 0; i < mapped.length; i++) {
-              withGaps.push(mapped[i]);
-              if (i < mapped.length - 1) {
-                const diff = mapped[i+1].timestamp - mapped[i].timestamp;
-                if (diff > GAP_THRESHOLD) {
-                  // Inject a null point in the middle of the gap to break the line
-                  withGaps.push({
-                    date: mapped[i].date,
-                    value: null,
-                    alarm: false,
-                    timestamp: mapped[i].timestamp + 1
-                  });
-                }
-              }
-            }
-            finalData = withGaps;
-          }
-
-          setHistory(finalData);
+          setHistory(mapped);
           setAlarmHistory(alarmsHistoryRows);
           setHistoryLoading(false);
         }
       } catch (err) {
         console.error("Failed to load history:", err);
+
         if (!cancelled) {
           setHistory([]);
           setHistoryError("Failed to load history");
@@ -460,28 +594,21 @@ export default function TankDetailsModal({
     limits?.maxTempC,
   ]);
 
-  /**
-   * Inject the live tank value into the chart dataset.
-   * Replaces the last data point's value with the current live reading,
-   * or appends a single point if history is empty.
-   * This ensures the plotted line ends at the real system state.
-   */
   const chartDataWithLive = React.useMemo(() => {
     if (!tank) return history;
 
-    // Compute the live display value for the current metric
     let liveDisplayValue: number;
     let isLiveAlarm = false;
 
     if (metric === "volume") {
       const unit = tank.volumeUnit ?? "L";
       const cap = tank.capacityLiters ?? 1000;
+
       liveDisplayValue =
         typeof tank.volumeValue === "number"
           ? tank.volumeValue
           : roundForUnit(convertFromLiters(currentVolumeLiters, unit, cap), unit);
 
-      // Recalculate alarm status for this live point
       isLiveAlarm =
         !!limits &&
         ((typeof limits.minVolumeL === "number" && currentVolumeLiters < limits.minVolumeL) ||
@@ -489,6 +616,7 @@ export default function TankDetailsModal({
     } else {
       const unit = tank.temperatureUnit ?? "°C";
       const tempC = tank.temperatureC ?? 0;
+
       liveDisplayValue =
         typeof tank.temperatureValue === "number"
           ? tank.temperatureValue
@@ -500,40 +628,116 @@ export default function TankDetailsModal({
           (typeof limits.maxTempC === "number" && tempC > limits.maxTempC));
     }
 
-    // Format today as YYYY-MM-DD (local time) or HH:mm
     const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const displayLabel = resolution === "time" ? timeStr : todayStr;
+    const nowT = now.getTime();
+    const [dMin, dMax] = chartXDomain;
 
-    // If no history data, create a single point with today's date
+    const isNowInRange = nowT >= dMin && nowT <= dMax + 10 * 60 * 1000;
+    if (!isNowInRange) return history;
+
+    const displayLabel =
+      resolution === "time"
+        ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : now.toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+    const livePoint: ChartPoint = {
+      date: displayLabel,
+      value: liveDisplayValue,
+      alarm: isLiveAlarm,
+      timestamp: nowT,
+      actualTimestamp: nowT,
+    };
+
     if (history.length === 0) {
-      return [{ date: displayLabel, value: liveDisplayValue, alarm: isLiveAlarm, timestamp: now.getTime() }];
+      return [livePoint];
     }
 
     const updated = [...history];
     const lastPoint = updated[updated.length - 1];
 
     if (lastPoint.date === displayLabel) {
-      // If the last point is already the current time/day, replace its value with live data
       updated[updated.length - 1] = {
         ...lastPoint,
         value: liveDisplayValue,
         alarm: isLiveAlarm,
-        timestamp: now.getTime()
+        timestamp: nowT,
+        actualTimestamp: nowT,
       };
     } else {
-      // Otherwise, append a new point
-      updated.push({
-        date: displayLabel,
-        value: liveDisplayValue,
-        alarm: isLiveAlarm,
-        timestamp: now.getTime()
+      updated.push(livePoint);
+    }
+
+    return insertNullGaps(updated, resolution);
+  }, [
+    history,
+    tank,
+    metric,
+    currentVolumeLiters,
+    limits,
+    resolution,
+    chartXDomain,
+  ]);
+
+  const handleExportCSV = async (type: "history" | "alarms") => {
+    if (!tank) return;
+
+    const startDate = new Date(chartXDomain[0]).toISOString();
+    const endDate = new Date(chartXDomain[1]).toISOString();
+
+    if (type === "history") {
+      const channel = metric === "volume" ? tank.volumeChannel : tank.temperatureChannel;
+      const url = `/api/influx/history/export?channel=${channel}&slug=${tank.companySlug}&tankKey=${tank.tankKey}&start=${startDate}&end=${endDate}&res=${resolution}&tankName=${encodeURIComponent(tank.name)}`;
+      window.open(url, "_blank");
+    } else {
+      const url = `/api/alarms/export?slug=${tank.companySlug}&tankKey=${tank.tankKey}&start=${startDate}&end=${endDate}`;
+      window.open(url, "_blank");
+    }
+  };
+
+  const handleExportPDF = (type: "history" | "alarms") => {
+    if (!tank) return;
+    const doc = new jsPDF();
+    const title = type === "history" ? `${tank.name} - History Report` : `${tank.name} - Alarm History Report`;
+    const unit = metric === "volume" ? tank.volumeUnit : tank.temperatureUnit;
+
+    doc.setFontSize(18);
+    doc.text(title, 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
+    doc.text(`Period: ${new Date(chartXDomain[0]).toLocaleDateString()} to ${new Date(chartXDomain[1]).toLocaleDateString()}`, 14, 37);
+    doc.text(`Metric: ${metric === 'volume' ? 'Volume' : 'Temperature'}`, 14, 44);
+
+    if (type === "history") {
+      const tableData = history.map(h => [
+        h.date,
+        h.value != null ? `${h.value.toFixed(2)} ${unit}` : "N/A"
+      ]);
+      autoTable(doc, {
+        head: [['Timestamp', 'Value']],
+        body: tableData,
+        startY: 50,
+      });
+    } else {
+      const tableData = alarmHistory.map(a => [
+        new Date(a.created_at).toLocaleString(),
+        `${a.value.toFixed(2)} ${unit}`,
+        a.threshold_type === 'min' ? 'Low Alarm' : 'High Alarm',
+        `${a.threshold.toFixed(2)} ${unit}`
+      ]);
+      autoTable(doc, {
+        head: [['Timestamp', 'Value', 'Alarm Type', 'Threshold']],
+        body: tableData,
+        startY: 50,
       });
     }
 
-    return updated;
-  }, [history, tank, metric, currentVolumeLiters, limits, resolution]);
+    doc.save(`${tank.name}_${type}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
 
   const alarmEvents = React.useMemo(() => {
     return chartDataWithLive.filter((p) => p.alarm);
@@ -541,20 +745,38 @@ export default function TankDetailsModal({
 
   if (!open || !tank) return null;
 
+  const invalidRange = resolution !== "time" && startStr > endStr;
+
+  console.log("MODAL CHART DOMAIN DEBUG", {
+    resolution,
+    startStr,
+    endStr,
+    startTimeStr,
+    endTimeStr,
+    chartXDomain,
+    startLabel: new Date(chartXDomain[0]).toLocaleString(),
+    endLabel: new Date(chartXDomain[1]).toLocaleString(),
+  });
+
   return (
     <div className="fixed inset-0 z-[90]">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
 
       <div className="absolute inset-0 md:left-1/2 md:top-1/2 md:inset-auto md:w-[95vw] md:max-w-5xl md:-translate-x-1/2 md:-translate-y-1/2">
         <div
-          className="h-full overflow-y-auto rounded-none border border-black/10 dark:border-white/10 bg-white dark:bg-white/5 p-4 shadow-2xl backdrop-blur-xl md:max-h-[85vh] md:rounded-2xl md:p-6"
+          className="h-full overflow-y-auto rounded-none border border-black/10 bg-white p-4 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 md:max-h-[85vh] md:rounded-2xl md:p-6"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white md:text-xl">
                 <span className="truncate">{tankName}</span>
-                {alarmNow ? (
+
+                {tank.isDisabled ? (
+                  <span className="shrink-0 rounded-full border border-black/20 bg-black/10 px-2 py-0.5 text-[10px] font-bold text-black/50 dark:border-white/20 dark:bg-white/10 dark:text-white/50">
+                    DISABLED
+                  </span>
+                ) : alarmNow ? (
                   <span className="shrink-0 rounded-full border border-red-500/30 bg-red-500/15 px-2 py-0.5 text-[10px] text-red-200">
                     ALARM
                   </span>
@@ -562,25 +784,33 @@ export default function TankDetailsModal({
               </div>
 
               <div className="text-sm text-black/60 dark:text-white/60">
-                {!tank.disableTemperature && (
+                {tank.isDisabled ? (
+                  <span className="italic opacity-70">No live data fetching</span>
+                ) : (
                   <>
-                    Temp:{" "}
-                    {typeof tank.temperatureValue === "number"
-                      ? `${tank.temperatureValue}${tank.temperatureUnit ?? "°C"}`
-                      : typeof tank.temperatureC === "number"
-                      ? `${tank.temperatureC.toFixed(1)}°C`
-                      : "--"}
-                  </>
-                )}
-                {!tank.disableTemperature && !tank.disableVolume && (
-                  <span className="mx-2 text-black/25 dark:text-white/25">•</span>
-                )}
-                {!tank.disableVolume && (
-                  <>
-                    Vol:{" "}
-                    {typeof tank.volumeValue === "number"
-                      ? `${tank.volumeValue}${tank.volumeUnit ?? "L"}`
-                      : `${Math.round(currentVolumeLiters)}L`}
+                    {!tank.disableTemperature && (
+                      <>
+                        Temp:{" "}
+                        {typeof tank.temperatureValue === "number"
+                          ? `${tank.temperatureValue}${tank.temperatureUnit ?? "°C"}`
+                          : typeof tank.temperatureC === "number"
+                            ? `${tank.temperatureC.toFixed(1)}°C`
+                            : "--"}
+                      </>
+                    )}
+
+                    {!tank.disableTemperature && !tank.disableVolume && (
+                      <span className="mx-2 text-black/25 dark:text-white/25">•</span>
+                    )}
+
+                    {!tank.disableVolume && (
+                      <>
+                        Vol:{" "}
+                        {typeof tank.volumeValue === "number"
+                          ? `${tank.volumeValue}${tank.volumeUnit ?? "L"}`
+                          : `${Math.round(currentVolumeLiters)}L`}
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -595,26 +825,82 @@ export default function TankDetailsModal({
                   {typeof limits.maxTempC === "number" ? `, Temp ≤ ${limits.maxTempC}°C` : ""}
                 </div>
               ) : (
-                <div className="mt-1 text-xs text-black/45 dark:text-white/45">No alarm limits set.</div>
+                <div className="mt-1 text-xs text-black/45 dark:text-white/45">
+                  No alarm limits set.
+                </div>
               )}
 
-              <div className={alarmNow ? "mt-2 text-xs text-red-600 dark:text-red-200" : "mt-2 text-xs text-emerald-600 dark:text-emerald-200/85"}>
-                {alarmNow
-                  ? `Alarm active${alarmReasons.length ? ` • ${alarmReasons.join(", ")}` : ""}`
-                  : "Within limits"}
+              <div
+                className={
+                  tank.isDisabled
+                    ? "mt-2 text-xs text-black/40 dark:text-white/40"
+                    : alarmNow
+                      ? "mt-2 text-xs text-red-600 dark:text-red-200"
+                      : "mt-2 text-xs text-emerald-600 dark:text-emerald-200/85"
+                }
+              >
+                {tank.isDisabled
+                  ? "Tank is currently inactive"
+                  : alarmNow
+                    ? `Alarm active${alarmReasons.length ? ` • ${alarmReasons.join(", ")}` : ""}`
+                    : "Within limits"}
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="shrink-0 rounded-full border border-black/15 dark:border-white/15 bg-black/5 dark:bg-white/5 px-4 py-2 text-xs text-black/80 dark:text-white/80 transition hover:bg-black/10 dark:hover:bg-white/10"
-            >
-              Close
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="flex items-center gap-1.5 rounded-xl border border-black/10 bg-black/5 p-1 dark:border-white/10 dark:bg-white/5">
+                <button
+                  onClick={() => handleExportCSV("history")}
+                  className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-bold text-black/60 transition hover:bg-black/5 hover:text-black dark:text-white/60 dark:hover:bg-white/5 dark:hover:text-white"
+                  title="Export History CSV"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">CSV</span>
+                </button>
+                <button
+                  onClick={() => handleExportPDF("history")}
+                  className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-bold text-black/60 transition hover:bg-black/5 hover:text-black dark:text-white/60 dark:hover:bg-white/5 dark:hover:text-white"
+                  title="Export History PDF"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">PDF</span>
+                </button>
+                {alarmHistory.length > 0 && (
+                  <div className="h-4 w-px bg-black/10 dark:bg-white/10 mx-1" />
+                )}
+                {alarmHistory.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => handleExportCSV("alarms")}
+                      className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-bold text-red-500/70 transition hover:bg-red-500/5 hover:text-red-500"
+                      title="Export Alarms CSV"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Alarms CSV</span>
+                    </button>
+                    <button
+                      onClick={() => handleExportPDF("alarms")}
+                      className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-bold text-red-500/70 transition hover:bg-red-500/5 hover:text-red-500"
+                      title="Export Alarms PDF"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Alarms PDF</span>
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={onClose}
+                className="shrink-0 rounded-full border border-black/15 bg-black/5 p-2 text-black/40 transition hover:bg-black/10 hover:text-black dark:border-white/15 dark:bg-white/5 dark:text-white/40 dark:hover:bg-white/10"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="flex items-center justify-center rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3 sm:p-4">
+            <div className="flex items-center justify-center rounded-2xl border border-black/10 bg-black/5 p-3 dark:border-white/10 dark:bg-white/5 sm:p-4">
               <FluidTank
                 level={selectedDisplay.visualLevel}
                 capacityLiters={tank.capacityLiters ?? 1000}
@@ -633,7 +919,7 @@ export default function TankDetailsModal({
             <div className="space-y-3">
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  {!tank?.disableVolume && (
+                  {!tank.disableVolume && (
                     <button
                       onClick={() => setMetric("volume")}
                       className={[
@@ -641,17 +927,17 @@ export default function TankDetailsModal({
                         volumeAlarmNow
                           ? metric === "volume"
                             ? "border-red-400/60 bg-red-500/20 text-red-900 dark:text-red-100"
-                            : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200 hover:bg-red-500/15"
+                            : "border-red-500/40 bg-red-500/10 text-red-700 hover:bg-red-500/15 dark:text-red-200"
                           : metric === "volume"
-                          ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
-                          : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
+                            ? "border-black/20 bg-black/15 text-black dark:border-white/20 dark:bg-white/15 dark:text-white"
+                            : "border-black/10 bg-black/5 text-black/70 hover:bg-black/10 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10",
                       ].join(" ")}
                     >
                       Volume
                     </button>
                   )}
 
-                  {!tank?.disableTemperature && (
+                  {!tank.disableTemperature && (
                     <button
                       onClick={() => setMetric("temperature")}
                       className={[
@@ -659,34 +945,40 @@ export default function TankDetailsModal({
                         temperatureAlarmNow
                           ? metric === "temperature"
                             ? "border-red-400/60 bg-red-500/20 text-red-900 dark:text-red-100"
-                            : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-200 hover:bg-red-500/15"
+                            : "border-red-500/40 bg-red-500/10 text-red-700 hover:bg-red-500/15 dark:text-red-200"
                           : metric === "temperature"
-                          ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
-                          : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
+                            ? "border-black/20 bg-black/15 text-black dark:border-white/20 dark:bg-white/15 dark:text-white"
+                            : "border-black/10 bg-black/5 text-black/70 hover:bg-black/10 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10",
                       ].join(" ")}
                     >
                       Temperature
                     </button>
                   )}
-                  <div className="w-px bg-black/10 dark:bg-white/10 mx-1" />
+
+                  <div className="mx-1 w-px bg-black/10 dark:bg-white/10" />
+
                   <button
                     onClick={() => setResolution("daily")}
                     className={[
                       "rounded-full border px-4 py-2 text-xs transition",
                       resolution === "daily"
-                        ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
-                        : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
+                        ? "border-black/20 bg-black/15 text-black dark:border-white/20 dark:bg-white/15 dark:text-white"
+                        : "border-black/10 bg-black/5 text-black/70 hover:bg-black/10 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10",
                     ].join(" ")}
                   >
                     Daily
                   </button>
+
                   <button
-                    onClick={() => setResolution("time")}
+                    onClick={() => {
+                      setResolution("time");
+                      setEndStr(startStr);
+                    }}
                     className={[
                       "rounded-full border px-4 py-2 text-xs transition",
                       resolution === "time"
-                        ? "border-black/20 dark:border-white/20 bg-black/15 dark:bg-white/15 text-black dark:text-white"
-                        : "border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 hover:bg-black/10 dark:hover:bg-white/10",
+                        ? "border-black/20 bg-black/15 text-black dark:border-white/20 dark:bg-white/15 dark:text-white"
+                        : "border-black/10 bg-black/5 text-black/70 hover:bg-black/10 dark:border-white/10 dark:bg-white/5 dark:text-white/70 dark:hover:bg-white/10",
                     ].join(" ")}
                   >
                     Time-based
@@ -695,7 +987,10 @@ export default function TankDetailsModal({
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                   <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">{resolution === "time" ? "Date" : "From"}</span>
+                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">
+                      {resolution === "time" ? "Date" : "From"}
+                    </span>
+
                     <input
                       type="date"
                       value={startStr}
@@ -703,41 +998,46 @@ export default function TankDetailsModal({
                         setStartStr(e.target.value);
                         if (resolution === "time") setEndStr(e.target.value);
                       }}
-                      className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[130px]"
+                      className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/85 outline-none dark:border-white/10 dark:bg-black/20 dark:text-white/85 sm:w-[130px]"
                     />
+
                     {resolution === "time" && (
                       <input
                         type="time"
                         value={startTimeStr}
                         onChange={(e) => setStartTimeStr(e.target.value)}
-                        className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[100px]"
+                        className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/85 outline-none dark:border-white/10 dark:bg-black/20 dark:text-white/85 sm:w-[100px]"
                       />
                     )}
                   </div>
 
                   <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">{resolution === "time" ? "To" : "To"}</span>
+                    <span className="whitespace-nowrap text-[11px] text-black/50 dark:text-white/50">
+                      To
+                    </span>
+
                     {resolution !== "time" && (
                       <input
                         type="date"
                         value={endStr}
                         onChange={(e) => setEndStr(e.target.value)}
-                        className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[130px]"
+                        className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/85 outline-none dark:border-white/10 dark:bg-black/20 dark:text-white/85 sm:w-[130px]"
                       />
                     )}
+
                     {resolution === "time" && (
                       <input
                         type="time"
                         value={endTimeStr}
                         onChange={(e) => setEndTimeStr(e.target.value)}
-                        className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-xs text-black/85 dark:text-white/85 outline-none sm:w-[100px]"
+                        className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/85 outline-none dark:border-white/10 dark:bg-black/20 dark:text-white/85 sm:w-[100px]"
                       />
                     )}
                   </div>
                 </div>
               </div>
 
-              {startStr > endStr ? (
+              {invalidRange ? (
                 <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-200">
                   Start date must be before end date.
                 </div>
@@ -746,7 +1046,7 @@ export default function TankDetailsModal({
                   {historyError}
                 </div>
               ) : historyLoading ? (
-                <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-6 text-sm text-black/60 dark:text-white/60">
+                <div className="rounded-2xl border border-black/10 bg-black/5 p-6 text-sm text-black/60 dark:border-white/10 dark:bg-white/5 dark:text-white/60">
                   Loading history...
                 </div>
               ) : (
@@ -769,25 +1069,11 @@ export default function TankDetailsModal({
                   {resolution === "time" ? (
                     <>Showing data for {startTimeStr} to {endTimeStr}</>
                   ) : (
-                    <>Showing {chartDataWithLive.length} day(s).</>
+                    <>Showing {chartDataWithLive.length} point(s).</>
                   )}
-                  {limits ? (
-                    <>
-                      <span className="mx-1 text-black/25 dark:text-white/25">•</span>
-                      Alarm points: {alarmEvents.length}
-                    </>
-                  ) : null}
+
                 </div>
-                {alarmHistory.length > 0 && (
-                  <a 
-                    href={`/api/alarms/export?slug=${tank.companySlug || ""}&tankKey=${encodeURIComponent(tank.tankKey || "")}&start=${encodeURIComponent(parseDateInput(startStr).toISOString())}&end=${encodeURIComponent(parseDateInput(endStr).toISOString())}`}
-                    className="text-blue-500 hover:underline"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Download Alarm Data
-                  </a>
-                )}
+
               </div>
             </div>
           </div>
