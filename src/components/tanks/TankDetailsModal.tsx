@@ -139,6 +139,7 @@ export default function TankDetailsModal({
   const [metric, setMetric] = React.useState<TankMetric>("volume");
   const [history, setHistory] = React.useState<ChartPoint[]>([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [refreshKey, setRefreshKey] = React.useState(0);
   const [historyError, setHistoryError] = React.useState("");
 
   const [resolution, setResolution] = React.useState<"daily" | "time">("daily");
@@ -189,6 +190,16 @@ export default function TankDetailsModal({
     setStartStr(toDateInputValue(defaultStart));
     setEndStr(toDateInputValue(today));
   }, [open, tankId, defaultStart, today, tank?.disableVolume, tank?.disableTemperature]);
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const id = window.setInterval(() => {
+      setRefreshKey((v) => v + 1);
+    }, 60000);
+
+    return () => window.clearInterval(id);
+  }, [open]);
 
   const limits = React.useMemo(() => {
     if (!tank) return undefined;
@@ -360,7 +371,9 @@ export default function TankDetailsModal({
       }
 
       if (!cancelled) {
-        setHistoryLoading(true);
+        if (history.length === 0) {
+          setHistoryLoading(true);
+        }
         setHistoryError("");
       }
 
@@ -430,7 +443,9 @@ export default function TankDetailsModal({
           if (metric === "volume") {
             const unit = tnk.volumeUnit ?? "L";
 
-            let liters = convertMaToLiters(raw, capacity, tnk.volumeMode);
+            let liters = Number(raw);
+
+            // Apply calibration only once
             liters = liters * (tnk.volumeM ?? 1.0) + (tnk.volumeC ?? 0.0);
 
             const displayValue = roundForUnit(
@@ -519,6 +534,9 @@ export default function TankDetailsModal({
         }
 
         mapped = insertNullGaps(mapped, resolution);
+        const nowMs = Date.now();
+
+        mapped = mapped.filter((p) => p.timestamp <= nowMs);
 
         console.log("========== MODAL HISTORY MAPPED ==========");
         console.log({
@@ -588,6 +606,8 @@ export default function TankDetailsModal({
     startTimeStr,
     endTimeStr,
     resolution,
+    refreshKey,
+    history.length,
     limits?.minVolumeL,
     limits?.maxVolumeL,
     limits?.minTempC,
