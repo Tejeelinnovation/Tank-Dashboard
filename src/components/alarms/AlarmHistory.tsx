@@ -75,7 +75,7 @@ export default function AlarmHistory({ slug }: { slug: string }) {
   };
 
   return (
-    <div className="mt-8 rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+    <div className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-black dark:text-white md:text-xl">

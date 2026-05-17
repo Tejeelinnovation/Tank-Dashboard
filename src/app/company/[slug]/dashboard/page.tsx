@@ -109,6 +109,7 @@ export default function CompanyDashboardPage() {
   const [alarmMap, setAlarmMap] = useState<Record<string, TankAlarmLimits>>({});
   const [userPermissions, setUserPermissions] = useState<{ tankKey: string; accessLevel: "view" | "edit" }[] | null>(null);
   const [sessionRole, setSessionRole] = useState<string | null>(null);
+  const [mobileAlarmTab, setMobileAlarmTab] = useState<"active" | "history">("active");
 
   const modalTank = useMemo(() => {
     if (!openTankId) return null;
@@ -423,8 +424,32 @@ export default function CompanyDashboardPage() {
                 </div>
               </div>
 
+              {/* Mobile Tabs for Alarms */}
+              <div className="flex gap-2 p-1.5 bg-black/5 dark:bg-white/5 rounded-2xl lg:hidden">
+                <button
+                  onClick={() => setMobileAlarmTab("active")}
+                  className={`flex-1 rounded-xl py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                    mobileAlarmTab === "active"
+                      ? "bg-white text-black shadow-md dark:bg-white/10 dark:text-white"
+                      : "text-black/50 hover:bg-black/5 dark:text-white/50 dark:hover:bg-white/5"
+                  }`}
+                >
+                  Active Alarms
+                </button>
+                <button
+                  onClick={() => setMobileAlarmTab("history")}
+                  className={`flex-1 rounded-xl py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                    mobileAlarmTab === "history"
+                      ? "bg-white text-black shadow-md dark:bg-white/10 dark:text-white"
+                      : "text-black/50 hover:bg-black/5 dark:text-white/50 dark:hover:bg-white/5"
+                  }`}
+                >
+                  History
+                </button>
+              </div>
+
               {/* Active Alarms */}
-              <div className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+              <div className={`rounded-3xl border border-black/10 bg-white/70 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5 ${mobileAlarmTab !== "active" ? "hidden lg:block" : ""}`}>
                 <div className="mb-6">
                   <h2 className="text-lg font-semibold text-black dark:text-white md:text-xl">Active Alarms</h2>
                   <p className="mt-1 text-sm text-black/60 dark:text-white/55">Latest notifications.</p>
@@ -455,7 +480,9 @@ export default function CompanyDashboardPage() {
               </div>
 
               {/* Alarm History */}
-              <AlarmHistory slug={slug} />
+              <div className={`${mobileAlarmTab !== "history" ? "hidden lg:block" : ""}`}>
+                <AlarmHistory slug={slug} />
+              </div>
             </div>
 
             {/* Main Content: Live Tanks */}
