@@ -341,6 +341,12 @@ export default function CompanyDashboardPage() {
             temperatureRaw !== undefined
               ? Math.round(temperatureRaw * 10) / 10
               : undefined,
+          volumeMode: cfg.volumeMode,
+          temperatureMode: cfg.temperatureMode,
+          volumeM: cfg.volumeM,
+          volumeC: cfg.volumeC,
+          temperatureM: cfg.temperatureM,
+          temperatureC_factor: cfg.temperatureC_factor,
           companySlug: slug,
           tankKey: cfg.id.includes("tank-") ? `Tank ${cfg.id.split("-")[1]}` : cfg.id, // Fallback to Tank X format if id is default
         };
