@@ -336,9 +336,9 @@ export default function TankHistoryChart({
               strokeWidth={3}
               dot={false}
               activeDot={{
-                r: 5,
+                r: 3,
                 stroke: "#fff",
-                strokeWidth: 2,
+                strokeWidth: 1,
                 fill: themeColor,
                 className: "drop-shadow-lg",
               }}

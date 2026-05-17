@@ -3,29 +3,11 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { queryInflux } from "@/lib/influx";
 import { pool } from "@/lib/postgres";
-import { cookies } from "next/headers";
-import { AUTH_COOKIE_NAME } from "@/lib/constants";
-import { verifyJWT } from "@/lib/jwt";
-import { getUserPermittedChannels } from "@/lib/dbUsers";
 
 const bucket = process.env.INFLUX_BUCKET!;
 
-type InfluxHistoryRow = {
-  _time: string;
-  _value: number | null;
-  channel: string;
-};
-
 function isValidDateString(v: string) {
   return !Number.isNaN(new Date(v).getTime());
-}
-
-function baseFlux(channel: string) {
-  return `
-  |> filter(fn: (r) => r._measurement == "tank_data")
-  |> filter(fn: (r) => r._field == "value")
-  |> filter(fn: (r) => r.channel == "${channel}")
-`;
 }
 
 export async function GET(
@@ -40,22 +22,13 @@ export async function GET(
     const end = searchParams.get("end")?.trim();
 
     if (!channel) {
-      return NextResponse.json({ error: "channel is required" }, { status: 400 });
-    }
-    
-    // Auth check
-    const cookieStore = await cookies();
-    const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    const session = token ? await verifyJWT(token) : null;
-    const isSubUser = session?.role === "user";
-
-    if (isSubUser && session?.userId) {
-      const permitted = await getUserPermittedChannels(session.userId);
-      if (!permitted.includes(channel.trim())) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
+      return NextResponse.json(
+        { error: "channel is required" },
+        { status: 400 }
+      );
     }
 
+    // Security check
     if (pool) {
       try {
         const disabledCheck = await pool.query(
@@ -67,10 +40,14 @@ export async function GET(
 
         if (disabledCheck.rows.length > 0) {
           const row = disabledCheck.rows[0];
+
           const isVolMatch = row.volume_channel === channel;
           const isTempMatch = row.temperature_channel === channel;
 
-          if ((isVolMatch && row.disable_volume) || (isTempMatch && row.disable_temperature)) {
+          if (
+            (isVolMatch && row.disable_volume) ||
+            (isTempMatch && row.disable_temperature)
+          ) {
             return NextResponse.json({
               rows: [],
               warning: "Metric is disabled in company settings",
@@ -82,111 +59,81 @@ export async function GET(
       }
     }
 
-    if (!start || !end || !isValidDateString(start) || !isValidDateString(end)) {
-      return NextResponse.json({ error: "valid start and end are required" }, { status: 400 });
+    if (
+      !start ||
+      !end ||
+      !isValidDateString(start) ||
+      !isValidDateString(end)
+    ) {
+      return NextResponse.json(
+        { error: "valid start and end are required" },
+        { status: 400 }
+      );
     }
 
     const resolution = searchParams.get("res") || "daily";
 
-    if (resolution === "daily") {
-      const flux = `
+    let flux = `
 from(bucket: "${bucket}")
   |> range(start: time(v: "${start}"), stop: time(v: "${end}"))
-${baseFlux(channel)}
-  |> aggregateWindow(every: 1d, fn: last, createEmpty: true)
-  |> keep(columns: ["_time", "_value", "channel"])
-  |> sort(columns: ["_time"])
+  |> filter(fn: (r) => r._measurement == "tank_data")
+  |> filter(fn: (r) => r._field == "value")
+  |> filter(fn: (r) => r.channel == "${channel}")
 `;
 
-      console.log("========== DAILY FLUX QUERY ==========");
-      console.log(flux);
-      console.log("====================================");
-
-      const rows = await queryInflux<InfluxHistoryRow>(flux);
-
-      console.log("========== DAILY INFLUX RESULT ==========");
-      console.log({
-        channel,
-        resolution,
-        start,
-        end,
-        totalRows: rows.length,
-        validRows: rows.filter((r) => r._value !== null && r._value !== undefined).length,
-        firstRow: rows[0] ?? null,
-        lastRow: rows[rows.length - 1] ?? null,
-      });
-      console.log("=======================================");
-
-      return NextResponse.json({ rows });
+    // Daily mode -> 1 hour points
+    // Time mode -> 15 minute points
+    if (resolution === "daily") {
+      flux += `
+  |> aggregateWindow(every: 1h, fn: last, createEmpty: false)
+`;
+    } else {
+      flux += `
+  |> aggregateWindow(every: 15m, fn: last, createEmpty: false)
+`;
     }
 
-    const previousFlux = `
-from(bucket: "${bucket}")
-  |> range(start: -90d, stop: time(v: "${start}"))
-${baseFlux(channel)}
-  |> last()
-  |> keep(columns: ["_time", "_value", "channel"])
-`;
-
-    const currentFlux = `
-from(bucket: "${bucket}")
-  |> range(start: time(v: "${start}"), stop: time(v: "${end}"))
-${baseFlux(channel)}
-  |> aggregateWindow(every: 1m, fn: last, createEmpty: true)
+    flux += `
   |> keep(columns: ["_time", "_value", "channel"])
   |> sort(columns: ["_time"])
 `;
 
-    console.log("========== TIME PREVIOUS FLUX QUERY ==========");
-    console.log(previousFlux);
-    console.log("=============================================");
-    console.log("========== TIME CURRENT FLUX QUERY ==========");
-    console.log(currentFlux);
-    console.log("============================================");
-
-    const [previousRows, currentRows] = await Promise.all([
-      queryInflux<InfluxHistoryRow>(previousFlux),
-      queryInflux<InfluxHistoryRow>(currentFlux),
-    ]);
-
-    const previousValidRows = previousRows.filter(
-      (r) => r._value !== null && r._value !== undefined && !Number.isNaN(Number(r._value))
-    );
-
-    const rows = [...previousValidRows.slice(-1), ...currentRows].sort(
-      (a, b) => new Date(a._time).getTime() - new Date(b._time).getTime()
-    );
-
-    const validRows = rows.filter(
-      (r) => r._value !== null && r._value !== undefined && !Number.isNaN(Number(r._value))
-    );
-
-    console.log("========== TIME INFLUX RESULT ==========");
+    console.log("========== HISTORY QUERY ==========");
     console.log({
       channel,
       resolution,
       start,
       end,
-      previousRows: previousRows.length,
-      previousValidRows: previousValidRows.length,
-      currentRows: currentRows.length,
-      totalRows: rows.length,
-      validRows: validRows.length,
-      previousCarryRow: previousValidRows.at(-1) ?? null,
-      firstRow: rows[0] ?? null,
-      lastRow: rows[rows.length - 1] ?? null,
     });
+    console.log(flux);
+    console.log("===================================");
+
+    const rows = await queryInflux<{
+      _time: string;
+      _value: number;
+      channel: string;
+    }>(flux);
+
+    console.log("========== HISTORY RESULT ==========");
+    console.log({
+      totalRows: rows.length,
+      firstRow: rows[0],
+      lastRow: rows[rows.length - 1],
+    });
+
     console.table(
-      validRows.slice(0, 30).map((r) => ({
+      rows.slice(0, 20).map((r) => ({
         time: r._time,
         value: r._value,
       }))
     );
-    console.log("======================================");
+
+    console.log("====================================");
 
     return NextResponse.json({ rows });
   } catch (error) {
     console.error("Failed to fetch Influx history:", error);
+
     return NextResponse.json(
       { error: "Failed to fetch Influx history" },
       { status: 500 }
