@@ -72,62 +72,81 @@ export async function GET(
     }
 
     const resolution = searchParams.get("res") || "daily";
-
-    let flux = `
+ 
+    const fluxRange = `
 from(bucket: "${bucket}")
   |> range(start: time(v: "${start}"), stop: time(v: "${end}"))
   |> filter(fn: (r) => r._measurement == "tank_data")
   |> filter(fn: (r) => r._field == "value")
   |> filter(fn: (r) => r.channel == "${channel}")
-`;
-
-    // Daily mode -> 1 hour points
-    // Time mode -> 15 minute points
-    if (resolution === "daily") {
-      flux += `
-  |> aggregateWindow(every: 1h, fn: last, createEmpty: false)
-`;
-    } else {
-      flux += `
-  |> aggregateWindow(every: 15m, fn: last, createEmpty: false)
-`;
-    }
-
-    flux += `
+  ${resolution === "daily" ? "|> aggregateWindow(every: 1h, fn: last, createEmpty: false)" : "|> aggregateWindow(every: 15m, fn: last, createEmpty: false)"}
   |> keep(columns: ["_time", "_value", "channel"])
   |> sort(columns: ["_time"])
 `;
+ 
+    const fluxPre = `
+from(bucket: "${bucket}")
+  |> range(start: time(v: "2020-01-01T00:00:00Z"), stop: time(v: "${start}"))
+  |> filter(fn: (r) => r._measurement == "tank_data")
+  |> filter(fn: (r) => r._field == "value")
+  |> filter(fn: (r) => r.channel == "${channel}")
+  |> last()
+  |> keep(columns: ["_time", "_value", "channel"])
+`;
 
-    console.log("========== HISTORY QUERY ==========");
-    console.log({
-      channel,
-      resolution,
-      start,
-      end,
-    });
-    console.log(flux);
-    console.log("===================================");
+    const fluxPost = `
+from(bucket: "${bucket}")
+  |> range(start: time(v: "${end}"), stop: now())
+  |> filter(fn: (r) => r._measurement == "tank_data")
+  |> filter(fn: (r) => r._field == "value")
+  |> filter(fn: (r) => r.channel == "${channel}")
+  |> first()
+  |> keep(columns: ["_time", "_value", "channel"])
+`;
 
-    const rows = await queryInflux<{
-      _time: string;
-      _value: number;
-      channel: string;
-    }>(flux);
+    console.log("========== HISTORY QUERIES ==========");
+    console.log("Range Query:\n", fluxRange);
+    console.log("Pre Query:\n", fluxPre);
+    console.log("Post Query:\n", fluxPost);
+    console.log("=====================================");
+
+    const [rangeRows, preRows, postRows] = await Promise.all([
+      queryInflux<any>(fluxRange).catch((err) => {
+        console.error("fluxRange error:", err);
+        return [];
+      }),
+      queryInflux<any>(fluxPre).catch((err) => {
+        console.error("fluxPre error:", err);
+        return [];
+      }),
+      queryInflux<any>(fluxPost).catch((err) => {
+        console.error("fluxPost error:", err);
+        return [];
+      }),
+    ]);
+
+    // Combine and sort
+    const rawRows = [...preRows, ...rangeRows, ...postRows];
+    
+    // De-duplicate by time just in case of overlaps
+    const seenTimes = new Set<string>();
+    const rows = rawRows
+      .filter((r) => {
+        if (!r?._time) return false;
+        if (seenTimes.has(r._time)) return false;
+        seenTimes.add(r._time);
+        return true;
+      })
+      .sort((a, b) => new Date(a._time).getTime() - new Date(b._time).getTime());
 
     console.log("========== HISTORY RESULT ==========");
     console.log({
       totalRows: rows.length,
+      preFound: preRows.length > 0,
+      postFound: postRows.length > 0,
       firstRow: rows[0],
       lastRow: rows[rows.length - 1],
     });
-
-    console.table(
-      rows.slice(0, 20).map((r) => ({
-        time: r._time,
-        value: r._value,
-      }))
-    );
-
     console.log("====================================");
 
     return NextResponse.json({ rows });

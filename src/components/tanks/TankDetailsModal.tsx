@@ -86,39 +86,7 @@ function insertNullGaps(
   points: ChartPoint[],
   resolution: "daily" | "time"
 ): ChartPoint[] {
-  const sorted = [...points].sort((a, b) => a.timestamp - b.timestamp);
-
-  const expectedGapMs =
-    resolution === "time"
-      ? 60 * 1000
-      : 60 * 60 * 1000;
-
-  const gapToleranceMs = expectedGapMs * 1.5;
-
-  const withGaps: ChartPoint[] = [];
-
-  for (let i = 0; i < sorted.length; i++) {
-    const current = sorted[i];
-    withGaps.push(current);
-
-    const next = sorted[i + 1];
-    if (!next) continue;
-
-    if (
-      typeof current.value === "number" &&
-      typeof next.value === "number" &&
-      next.timestamp - current.timestamp > gapToleranceMs
-    ) {
-      withGaps.push({
-        date: "",
-        value: null,
-        alarm: false,
-        timestamp: current.timestamp + 1,
-      });
-    }
-  }
-
-  return withGaps;
+  return [...points].sort((a, b) => a.timestamp - b.timestamp);
 }
 
 export default function TankDetailsModal({
@@ -442,16 +410,48 @@ export default function TankDetailsModal({
 
           if (metric === "volume") {
             const unit = tnk.volumeUnit ?? "L";
+            const configuredMode = tnk.volumeMode ?? "default";
 
-            let liters = Number(raw);
+            let effectiveMode = configuredMode;
 
-            // Apply calibration only once
+            // If setup says default/mA but raw value looks like percent,
+            // prevent treating 50–100 as 50mA–100mA.
+
+
+            if (
+              (effectiveMode === "percent" || effectiveMode === "inverted") &&
+              (!Number.isFinite(raw) || raw < 0 || raw > 100)
+            ) {
+              return {
+                date,
+                value: null,
+                alarm: false,
+                timestamp: t,
+                actualTimestamp: t,
+              };
+            }
+
+            let liters = convertMaToLiters(raw, capacity, effectiveMode);
+
+            // Apply calibration only for actual mA/default mode.
             liters = liters * (tnk.volumeM ?? 1.0) + (tnk.volumeC ?? 0.0);
 
             const displayValue = roundForUnit(
               convertFromLiters(liters, unit, capacity),
               unit
             );
+
+            console.log("HISTORY VALUE CHECK", {
+              raw,
+              configuredMode,
+              effectiveMode,
+              capacity,
+              volumeM: tnk.volumeM,
+              volumeC: tnk.volumeC,
+              liters,
+              displayValue,
+            });
+
 
             return {
               date,
@@ -498,47 +498,37 @@ export default function TankDetailsModal({
         };
 
         let mapped: ChartPoint[] = rows.map(mapInfluxRowToPoint);
-
+ 
         const rangeStart = start.getTime();
         const rangeEnd = stop.getTime();
-
-        const previousPoint = [...mapped]
+ 
+        const prePoint = [...mapped]
           .filter((p) => p.timestamp < rangeStart && typeof p.value === "number")
           .sort((a, b) => b.timestamp - a.timestamp)[0];
-
+ 
+        const postPoint = [...mapped]
+          .filter((p) => p.timestamp > rangeEnd && typeof p.value === "number")
+          .sort((a, b) => a.timestamp - b.timestamp)[0];
+ 
         const inRangePoints = mapped.filter(
           (p) => p.timestamp >= rangeStart && p.timestamp <= rangeEnd
         );
-
-        const hasRealValueInsideRange = inRangePoints.some(
-          (p) => typeof p.value === "number"
-        );
-
-        if (resolution === "time") {
-          if (previousPoint && hasRealValueInsideRange) {
-            mapped = [
-              {
-                ...previousPoint,
-                date: formatPointLabel(rangeStart, resolution),
-                actualTimestamp: previousPoint.actualTimestamp ?? previousPoint.timestamp,
-                carriedForward: true,
-                timestamp: rangeStart,
-              },
-              ...inRangePoints,
-            ];
-          } else {
-            mapped = inRangePoints;
-          }
-        } else {
-          mapped = inRangePoints;
+ 
+        let finalPoints = [...inRangePoints];
+        if (prePoint) {
+          finalPoints.unshift(prePoint);
         }
+        if (postPoint) {
+          finalPoints.push(postPoint);
+        }
+ 
+        mapped = finalPoints;
 
         mapped = insertNullGaps(mapped, resolution);
         const nowMs = Date.now();
 
         mapped = mapped.filter((p) => p.timestamp <= nowMs);
 
-        console.log("========== MODAL HISTORY MAPPED ==========");
         console.log({
           metric,
           resolution,
@@ -547,8 +537,8 @@ export default function TankDetailsModal({
           stop: stop.toISOString(),
           rawRows: rows.length,
           mappedRows: mapped.length,
-          hasRealValueInsideRange,
-          previousPoint: previousPoint ?? null,
+          prePoint: prePoint ?? null,
+          postPoint: postPoint ?? null,
         });
         console.table(
           mapped.map((p) => ({
@@ -624,10 +614,7 @@ export default function TankDetailsModal({
       const unit = tank.volumeUnit ?? "L";
       const cap = tank.capacityLiters ?? 1000;
 
-      liveDisplayValue =
-        typeof tank.volumeValue === "number"
-          ? tank.volumeValue
-          : roundForUnit(convertFromLiters(currentVolumeLiters, unit, cap), unit);
+      liveDisplayValue = selectedDisplay.value;
 
       isLiveAlarm =
         !!limits &&
@@ -701,6 +688,7 @@ export default function TankDetailsModal({
     limits,
     resolution,
     chartXDomain,
+    selectedDisplay.value,
   ]);
 
   const handleExportCSV = async (type: "history" | "alarms") => {

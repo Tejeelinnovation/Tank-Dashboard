@@ -186,9 +186,36 @@ export default function TankHistoryChart({
   const themeColor = color || defaultColor;
 
   const dottedThresholdMs = React.useMemo(() => {
-    // Dotted if gap > 1 minute
-    return 60 * 1000;
-  }, []);
+    const sorted = [...chartData]
+      .filter((p) => typeof p.timestamp === "number" && typeof p.value === "number")
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    if (sorted.length < 2) {
+      return 30 * 60 * 1000; // Fallback to 30 mins
+    }
+
+    const intervals: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const diff = sorted[i].timestamp - sorted[i - 1].timestamp;
+      if (diff > 0) {
+        intervals.push(diff);
+      }
+    }
+
+    if (intervals.length === 0) {
+      return 30 * 60 * 1000; // Fallback to 30 mins
+    }
+
+    // Find the median interval
+    intervals.sort((a, b) => a - b);
+    const median = intervals[Math.floor(intervals.length / 2)];
+
+    // Minimum limit to avoid tiny intervals (e.g., 10 seconds min)
+    const baseInterval = Math.max(median, 10000);
+
+    // Dynamic threshold is 1.75 times the median interval
+    return baseInterval * 1.75;
+  }, [chartData]);
 
   const { solidSegments, gapSegments } = React.useMemo(
     () => buildSegments(chartData, dottedThresholdMs),
@@ -278,6 +305,7 @@ export default function TankHistoryChart({
             dataKey="timestamp"
             type="number"
             domain={xDomain || ["auto", "auto"]}
+            allowDataOverflow={true}
             ticks={xTicks}
             tick={{ fill: "currentColor", fontSize: 10, opacity: 0.5 }}
             tickFormatter={(t) => {
