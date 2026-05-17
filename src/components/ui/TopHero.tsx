@@ -91,7 +91,7 @@ export default function TopHero({
 
   return (
     <header className="relative overflow-hidden">
-      <div className="relative mx-auto max-w-6xl px-6 pt-6 pb-14">
+      <div className="relative mx-auto max-w-6xl px-4 sm:px-6 pt-2 pb-2 md:pb-3">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center">
           <div className="flex items-center justify-start">
             <Link href="/">
@@ -151,7 +151,7 @@ export default function TopHero({
           </div>
         </div>
 
-        <div className="mt-16 md:mt-20 text-center flex flex-col items-center">
+        <div className="text-center flex flex-col items-center">
           {logoUrl ? (
             <div className="mb-4">
               <img

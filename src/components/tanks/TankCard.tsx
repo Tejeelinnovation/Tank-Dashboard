@@ -55,16 +55,24 @@ export default function TankCard({
 }: TankCardProps) {
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const tempText = useMemo(() => {
     if (!mounted) return "--";
 
-    if (typeof temperatureValue === "number" && Number.isFinite(temperatureValue)) {
+    if (
+      typeof temperatureValue === "number" &&
+      Number.isFinite(temperatureValue)
+    ) {
       return temperatureValue.toFixed(1);
     }
 
-    if (typeof temperatureC !== "number" || Number.isNaN(temperatureC)) {
+    if (
+      typeof temperatureC !== "number" ||
+      !Number.isFinite(temperatureC)
+    ) {
       return "--";
     }
 
@@ -86,7 +94,10 @@ export default function TankCard({
   }, [levelPercent, capacityLiters]);
 
   const displayVolume = useMemo(() => {
-    if (typeof volumeValue === "number" && Number.isFinite(volumeValue)) {
+    if (
+      typeof volumeValue === "number" &&
+      Number.isFinite(volumeValue)
+    ) {
       return volumeValue;
     }
 
@@ -98,11 +109,19 @@ export default function TankCard({
 
     if (!limits) return reasons;
 
-    if (!disableVolume && typeof limits.minVolumeL === "number" && nowVol < limits.minVolumeL) {
+    if (
+      !disableVolume &&
+      typeof limits.minVolumeL === "number" &&
+      nowVol < limits.minVolumeL
+    ) {
       reasons.push("Low Volume");
     }
 
-    if (!disableVolume && typeof limits.maxVolumeL === "number" && nowVol > limits.maxVolumeL) {
+    if (
+      !disableVolume &&
+      typeof limits.maxVolumeL === "number" &&
+      nowVol > limits.maxVolumeL
+    ) {
       reasons.push("High Volume");
     }
 
@@ -128,7 +147,9 @@ export default function TankCard({
   }, [limits, nowVol, temperatureC, disableVolume, disableTemperature]);
 
   const resolvedAlarmActive =
-    typeof alarmActive === "boolean" ? alarmActive : fallbackAlarmReasons.length > 0;
+    typeof alarmActive === "boolean"
+      ? alarmActive
+      : fallbackAlarmReasons.length > 0;
 
   const resolvedAlarmLabel =
     typeof alarmLabel === "string"
@@ -141,24 +162,30 @@ export default function TankCard({
     <button
       type="button"
       onClick={onOpen}
+      disabled={isDisabled}
       className={[
-        "w-full min-w-0 rounded-3xl border p-5 text-left shadow-xl backdrop-blur transition",
-        "overflow-visible",
+        "w-full min-w-0 rounded-3xl border p-3 sm:p-5 text-left shadow-xl backdrop-blur transition",
         isDisabled
-          ? "cursor-pointer border-black/10 bg-black/5 opacity-60 grayscale hover:opacity-80 dark:border-white/10 dark:bg-white/5"
+          ? "cursor-not-allowed border-black/10 bg-black/5 opacity-40 grayscale dark:border-white/10 dark:bg-white/5"
           : resolvedAlarmActive
             ? "border-red-500/50 bg-red-500/10 ring-1 ring-red-500/20 shadow-red-950/30 hover:bg-red-500/15"
             : "border-black/10 bg-black/5 hover:bg-black/10 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/8",
       ].join(" ")}
     >
-      <div className="mb-5 flex min-w-0 items-start justify-between gap-4">
+      <div className="mb-4 flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="truncate text-2xl font-bold text-black dark:text-white" title={name}>
+          <h2
+            className="truncate text-2xl font-bold text-black dark:text-white"
+            title={name}
+          >
             {name}
           </h2>
 
           {!disableTemperature && (
-            <p className="mt-2 text-base text-black/60 dark:text-white/60" suppressHydrationWarning>
+            <p
+              className="mt-2 text-base text-black/60 dark:text-white/60"
+              suppressHydrationWarning
+            >
               Temp: {tempText}
               {temperatureUnit}
             </p>
@@ -197,19 +224,27 @@ export default function TankCard({
                   : "text-emerald-500"
               }`}
           >
-            {isDisabled ? "Offline" : !hasData ? "Disconnected" : resolvedAlarmActive ? "Alarm" : "Live"}
+            {isDisabled
+              ? "Offline"
+              : !hasData
+                ? "Disconnected"
+                : resolvedAlarmActive
+                  ? "Alarm"
+                  : "Live"}
           </span>
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 justify-center">
+      <div className="mt-4 flex w-full min-w-0 justify-center overflow-hidden">
         {isDisabled || (disableVolume && disableTemperature) ? (
-          <div className="flex h-[260px] w-full items-center justify-center text-sm font-medium italic opacity-50">
+          <div className="flex h-[300px] w-full items-center justify-center text-sm font-medium italic opacity-50 sm:h-[360px]">
             {isDisabled ? "Disabled" : "No Metrics"}
           </div>
         ) : (
-          <div className="w-full max-w-[420px] min-w-0">
+          <div className="w-full max-w-[240px] min-w-0 sm:max-w-[300px]">
             <FluidTank
+              width={240}
+              height={320}
               level={disableVolume ? 50 : levelPercent}
               capacityLiters={capacityLiters ?? 1000}
               variant={variant}
