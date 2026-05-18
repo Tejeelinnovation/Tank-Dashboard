@@ -293,7 +293,7 @@ export default function TankDetailsModal({
     }
 
     const end = parseDateInput(endStr);
-    end.setDate(end.getDate() + 1);
+    end.setHours(23, 59, 59, 999);
 
     return [start.getTime(), end.getTime()] as [number, number];
   }, [startStr, endStr, startTimeStr, endTimeStr, resolution]);
@@ -498,22 +498,22 @@ export default function TankDetailsModal({
         };
 
         let mapped: ChartPoint[] = rows.map(mapInfluxRowToPoint);
- 
+
         const rangeStart = start.getTime();
         const rangeEnd = stop.getTime();
- 
+
         const prePoint = [...mapped]
           .filter((p) => p.timestamp < rangeStart && typeof p.value === "number")
           .sort((a, b) => b.timestamp - a.timestamp)[0];
- 
+
         const postPoint = [...mapped]
           .filter((p) => p.timestamp > rangeEnd && typeof p.value === "number")
           .sort((a, b) => a.timestamp - b.timestamp)[0];
- 
+
         const inRangePoints = mapped.filter(
           (p) => p.timestamp >= rangeStart && p.timestamp <= rangeEnd
         );
- 
+
         let finalPoints = [...inRangePoints];
         if (prePoint) {
           finalPoints.unshift(prePoint);
@@ -521,7 +521,7 @@ export default function TankDetailsModal({
         if (postPoint) {
           finalPoints.push(postPoint);
         }
- 
+
         mapped = finalPoints;
 
         mapped = insertNullGaps(mapped, resolution);
