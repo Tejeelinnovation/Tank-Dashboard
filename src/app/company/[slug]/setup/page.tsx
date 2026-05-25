@@ -36,6 +36,8 @@ type TankSetupItem = {
     { channel: string; type: "temperature"; unit: TemperatureUnit },
   ];
   isDisabled?: boolean;
+  displayInKg?: boolean;
+  density?: number;
 };
 
 const FLUID_COLOR_SWATCHES = [
@@ -61,6 +63,8 @@ function makeDefaultTank(i: number): TankSetupItem {
     capacityLiters: 1000,
     variant: "rect",
     fluidColor: undefined,
+    displayInKg: false,
+    density: 1.0,
     metrics: [
       {
         channel: `CH${i * 2 + 1}`,
@@ -139,6 +143,8 @@ function normalizeTank(
     temperatureC_factor:
       t?.temperatureC_factor != null ? Number(t.temperatureC_factor) : 0.0,
     isDisabled: !!(t as any)?.is_disabled || !!(t as any)?.isDisabled,
+    displayInKg: !!(t as any)?.displayInKg,
+    density: (t as any)?.density != null ? Number((t as any).density) : 1.0,
     metrics: [
       normalizeVolumeMetric(metrics[0] || t, `CH${i * 2 + 1}`),
       normalizeTemperatureMetric(metrics[1] || t, `CH${i * 2 + 2}`),
@@ -497,7 +503,9 @@ export default function CompanySetupPage() {
     | "volumeC"
     | "temperatureM"
     | "temperatureC_factor"
-    | "isDisabled",
+    | "isDisabled"
+    | "displayInKg"
+    | "density",
   >(i: number, key: K, value: TankSetupItem[K]) {
     setTanks((prev) => {
       const copy = [...prev];
@@ -1649,6 +1657,48 @@ export default function CompanySetupPage() {
                                         className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20"
                                       />
                                     </div>
+                                  </div>
+
+                                  <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-2">
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={!!tank.displayInKg}
+                                        onChange={(e) =>
+                                          updateTankField(
+                                            i,
+                                            "displayInKg",
+                                            e.target.checked,
+                                          )
+                                        }
+                                        className="cursor-pointer"
+                                      />
+                                      <span className="text-[10px] opacity-70 font-semibold">
+                                        Display value in KG
+                                      </span>
+                                    </label>
+
+                                    {!!tank.displayInKg && (
+                                      <div>
+                                        <span className="text-[10px] opacity-60">
+                                          Liquid Density (kg/L)
+                                        </span>
+                                        <input
+                                          type="number"
+                                          step="0.001"
+                                          min="0.001"
+                                          value={tank.density ?? 1.0}
+                                          onChange={(e) =>
+                                            updateTankField(
+                                              i,
+                                              "density",
+                                              Number(e.target.value),
+                                            )
+                                          }
+                                          className="w-full mt-1 border border-black/5 rounded-lg py-1 px-1 bg-black/5 dark:bg-black/20 text-xs"
+                                        />
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
 

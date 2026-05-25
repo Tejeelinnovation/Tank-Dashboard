@@ -135,6 +135,8 @@ export default function TankDashboardLive() {
           tempColor: row.temp_color ?? row.tempColor ?? undefined,
           disableVolume: !!(row.disable_volume ?? row.disableVolume),
           disableTemperature: !!(row.disable_temperature ?? row.disableTemperature),
+          displayInKg: !!(row.display_in_kg ?? row.displayInKg),
+          density: row.density != null ? Number(row.density) : 1.0,
           metrics: [
             {
               channel: String(
@@ -222,6 +224,8 @@ export default function TankDashboardLive() {
           tempColor: cfg.tempColor,
           disableVolume: cfg.disableVolume,
           disableTemperature: cfg.disableTemperature,
+          displayInKg: cfg.displayInKg,
+          density: cfg.density,
           volumeValue:
             !cfg.disableVolume && volumeRaw !== undefined
               ? Math.round(volumeRaw * 100) / 100

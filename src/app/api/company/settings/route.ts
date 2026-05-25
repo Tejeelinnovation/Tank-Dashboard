@@ -65,6 +65,12 @@ async function resolveCompanyId(req: NextRequest, body?: any) {
 
 export async function GET(req: NextRequest) {
   try {
+    // Ensure table columns exist
+    await pool.query(`
+      ALTER TABLE company_tank_settings ADD COLUMN IF NOT EXISTS display_in_kg BOOLEAN DEFAULT FALSE;
+      ALTER TABLE company_tank_settings ADD COLUMN IF NOT EXISTS density DOUBLE PRECISION DEFAULT 1.0;
+    `);
+
     const adminLoggedIn = await isAdminLoggedIn();
     const resolved = await resolveCompanyId(req);
 
@@ -156,6 +162,8 @@ export async function GET(req: NextRequest) {
       temperatureM: row.temperature_m != null ? Number(row.temperature_m) : 1.0,
       temperatureC_factor: row.temperature_c != null ? Number(row.temperature_c) : 0.0, // using temperatureC_factor to avoid confusion with current temp
       isDisabled: !!row.is_disabled,
+      displayInKg: !!row.display_in_kg,
+      density: row.density != null ? Number(row.density) : 1.0,
     }));
 
     const alarmsRes = await pool.query(
@@ -342,6 +350,8 @@ export async function POST(req: NextRequest) {
       // Ensure column exists
       await client.query(`
         ALTER TABLE company_tank_settings ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE;
+        ALTER TABLE company_tank_settings ADD COLUMN IF NOT EXISTS display_in_kg BOOLEAN DEFAULT FALSE;
+        ALTER TABLE company_tank_settings ADD COLUMN IF NOT EXISTS density DOUBLE PRECISION DEFAULT 1.0;
       `);
 
       await client.query(
@@ -370,9 +380,11 @@ export async function POST(req: NextRequest) {
           temperature_m,
           temperature_c,
           is_disabled,
+          display_in_kg,
+          density,
           updated_at
         )
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,now())
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,now())
         on conflict (company_id, tank_key) do update set
           tank_name = excluded.tank_name,
           volume_channel = excluded.volume_channel,
@@ -395,6 +407,8 @@ export async function POST(req: NextRequest) {
           temperature_m = excluded.temperature_m,
           temperature_c = excluded.temperature_c,
           is_disabled = excluded.is_disabled,
+          display_in_kg = excluded.display_in_kg,
+          density = excluded.density,
           updated_at = now()
         `,
         [
@@ -420,7 +434,9 @@ export async function POST(req: NextRequest) {
           tank?.volumeC != null ? Number(tank.volumeC) : 0.0,
           tank?.temperatureM != null ? Number(tank.temperatureM) : 1.0,
           tank?.temperatureC_factor != null ? Number(tank.temperatureC_factor) : 0.0,
-          is_disabled
+          is_disabled,
+          !!tank?.displayInKg,
+          tank?.density != null ? Number(tank.density) : 1.0
         ]
       );
     }

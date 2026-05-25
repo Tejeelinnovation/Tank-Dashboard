@@ -3,6 +3,7 @@
 import React from "react";
 import FluidTank from "./FluidTankClient";
 import TankHistoryChart from "./TankHistoryChart";
+import TankHistoryChartFullScreen from "./TankHistoryChartFullScreen";
 import type { Tank } from "./TankGrid";
 import type { TankAlarmLimits } from "@/types/alarm";
 import {
@@ -114,6 +115,7 @@ export default function TankDetailsModal({
   const [startTimeStr, setStartTimeStr] = React.useState("00:00");
   const [endTimeStr, setEndTimeStr] = React.useState("23:59");
   const [alarmHistory, setAlarmHistory] = React.useState<any[]>([]);
+  const [showFullScreenChart, setShowFullScreenChart] = React.useState(false);
 
   const today = React.useMemo(() => {
     const d = new Date();
@@ -921,6 +923,8 @@ export default function TankDetailsModal({
                 displayUnit={selectedDisplay.label}
                 accent={selectedDisplay.accent}
                 fluidColor={selectedDisplay.accent === "volume" ? tank.fluidColor : tank.tempColor}
+                displayInKg={tank.displayInKg}
+                density={tank.density}
               />
             </div>
 
@@ -1069,6 +1073,7 @@ export default function TankDetailsModal({
                   color={selectedDisplay.accent === "volume" ? tank.fluidColor : tank.tempColor}
                   capacity={tank.capacityLiters}
                   xDomain={chartXDomain}
+                  onDoubleClick={() => setShowFullScreenChart(true)}
                 />
               )}
 
@@ -1089,6 +1094,18 @@ export default function TankDetailsModal({
           <div className="h-6 md:hidden" />
         </div>
       </div>
+
+      {showFullScreenChart && (
+        <TankHistoryChartFullScreen
+          tank={tank}
+          metric={metric}
+          unitLabel={selectedDisplay.label}
+          color={selectedDisplay.accent === "volume" ? tank.fluidColor : tank.tempColor}
+          initialDomain={chartXDomain}
+          alarmMap={alarmMap}
+          onClose={() => setShowFullScreenChart(false)}
+        />
+      )}
     </div>
   );
 }

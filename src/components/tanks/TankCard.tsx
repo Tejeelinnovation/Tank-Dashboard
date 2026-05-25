@@ -26,6 +26,8 @@ type TankCardProps = {
   disableVolume?: boolean;
   disableTemperature?: boolean;
   isDisabled?: boolean;
+  displayInKg?: boolean;
+  density?: number;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -52,6 +54,8 @@ export default function TankCard({
   disableVolume,
   disableTemperature,
   isDisabled,
+  displayInKg,
+  density,
 }: TankCardProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -260,6 +264,8 @@ export default function TankCard({
               displayUnit={disableVolume ? temperatureUnit : volumeUnit}
               accent={disableVolume ? "temperature" : "volume"}
               fluidColor={disableVolume ? tempColor : fluidColor}
+              displayInKg={displayInKg}
+              density={density}
             />
           </div>
         )}
