@@ -7,6 +7,7 @@ import {
   animate,
   useAnimationFrame,
 } from "framer-motion";
+import { convertToLiters, type VolumeUnit } from "@/lib/conversions";
 
 type Variant = "rect" | "cylinder";
 type Surface = "wave" | "flat";
@@ -26,6 +27,8 @@ type FluidTankProps = {
   displayUnit?: string;
   accent?: Accent;
   fluidColor?: string;
+  displayInKg?: boolean;
+  density?: number;
 };
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -91,6 +94,8 @@ export default function FluidTank({
   displayUnit,
   accent = "volume",
   fluidColor,
+  displayInKg = false,
+  density = 1.0,
 }: FluidTankProps) {
   const pad = 14;
   const innerW = width - pad * 2;
@@ -137,6 +142,23 @@ export default function FluidTank({
       : computedDisplayValue;
 
   const shownUnit = displayUnit ?? computedDisplayUnit;
+
+  const displayNode = React.useMemo(() => {
+    const formattedVolume = formatDisplayValue(shownValue, shownUnit);
+    if (!displayInKg || accent !== "volume") {
+      return <span>{formattedVolume}</span>;
+    }
+
+    const liters = convertToLiters(shownValue, shownUnit as VolumeUnit, capacityLiters);
+    const massKg = liters * density;
+    const formattedMass = `${massKg.toFixed(1)} kg`;
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>{formattedVolume}</span>
+        <span className="text-[11px] opacity-80 mt-0.5">{formattedMass}</span>
+      </div>
+    );
+  }, [shownValue, shownUnit, displayInKg, density, accent, capacityLiters]);
 
   const buildFlatPath = (topY: number) => {
     const x0 = pad;
@@ -450,11 +472,13 @@ export default function FluidTank({
       >
         <div
           className={[
-            "max-w-[140px] truncate rounded-full border px-4 py-1.5 text-sm font-bold text-white shadow-2xl backdrop-blur-xl",
+            displayInKg && accent === "volume"
+              ? "max-w-[200px] rounded-2xl border px-4 py-2 text-sm font-bold text-white shadow-2xl backdrop-blur-xl flex flex-col items-center justify-center"
+              : "max-w-[140px] truncate rounded-full border px-4 py-1.5 text-sm font-bold text-white shadow-2xl backdrop-blur-xl",
             badgeClass,
           ].join(" ")}
         >
-          {formatDisplayValue(shownValue, shownUnit)}
+          {displayNode}
         </div>
       </div>
     </div>

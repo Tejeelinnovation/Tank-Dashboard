@@ -73,13 +73,24 @@ export async function GET(
 
     const resolution = searchParams.get("res") || "daily";
  
+    let aggregateWindowStr = "";
+    const whitelistedIntervals = ["30d", "7d", "1d", "12h", "6h", "1h", "30m", "15m", "5m", "1m"];
+
+    if (whitelistedIntervals.includes(resolution)) {
+      aggregateWindowStr = `|> aggregateWindow(every: ${resolution}, fn: last, createEmpty: false)`;
+    } else if (resolution === "daily") {
+      aggregateWindowStr = "|> aggregateWindow(every: 1h, fn: last, createEmpty: false)";
+    } else {
+      aggregateWindowStr = "|> aggregateWindow(every: 15m, fn: last, createEmpty: false)";
+    }
+
     const fluxRange = `
 from(bucket: "${bucket}")
   |> range(start: time(v: "${start}"), stop: time(v: "${end}"))
   |> filter(fn: (r) => r._measurement == "tank_data")
   |> filter(fn: (r) => r._field == "value")
   |> filter(fn: (r) => r.channel == "${channel}")
-  ${resolution === "daily" ? "|> aggregateWindow(every: 1h, fn: last, createEmpty: false)" : "|> aggregateWindow(every: 15m, fn: last, createEmpty: false)"}
+  ${aggregateWindowStr}
   |> keep(columns: ["_time", "_value", "channel"])
   |> sort(columns: ["_time"])
 `;

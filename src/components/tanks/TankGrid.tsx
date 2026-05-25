@@ -33,6 +33,8 @@ export type Tank = {
   companySlug?: string;
   tankKey?: string;
   isDisabled?: boolean;
+  displayInKg?: boolean;
+  density?: number;
 };
 
 type TankGridProps = {
@@ -232,6 +234,8 @@ export default function TankGrid({
                 disableVolume={tank.disableVolume}
                 disableTemperature={tank.disableTemperature}
                 isDisabled={tank.isDisabled}
+                displayInKg={tank.displayInKg}
+                density={tank.density}
                 onOpen={
                   onOpenTank ? () => onOpenTank(tank) : undefined
                 }

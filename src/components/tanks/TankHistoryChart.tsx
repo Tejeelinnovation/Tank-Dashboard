@@ -10,6 +10,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
+import { Maximize2 } from "lucide-react";
 
 type TankMetric = "volume" | "temperature";
 
@@ -164,6 +165,7 @@ export default function TankHistoryChart({
   color,
   capacity,
   xDomain,
+  onDoubleClick,
 }: {
   data: ChartPoint[];
   gapData?: { timestamp: number; value: number | null }[];
@@ -176,6 +178,7 @@ export default function TankHistoryChart({
   color?: string;
   capacity?: number;
   xDomain?: [number, number];
+  onDoubleClick?: () => void;
 }) {
   const chartData = data || [];
   const isEmpty =
@@ -285,7 +288,19 @@ export default function TankHistoryChart({
   }, [chartData, solidSegments, gapSegments, xDomain, xTicks, yDomain, dottedThresholdMs]);
 
   return (
-    <div className="relative h-[220px] w-full rounded-2xl border border-black/10 bg-white/50 p-3 transition-colors dark:border-white/10 dark:bg-white/5 sm:h-[280px]">
+    <div
+      onDoubleClick={onDoubleClick}
+      className={`relative h-[220px] w-full rounded-2xl border border-black/10 bg-white/50 p-3 transition-all duration-300 dark:border-white/10 dark:bg-white/5 sm:h-[280px] ${
+        onDoubleClick ? "cursor-pointer group select-none hover:shadow-lg hover:border-black/20 dark:hover:border-white/20" : ""
+      }`}
+    >
+      {onDoubleClick && (
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-lg border border-black/10 bg-white/75 px-2 py-1 text-[9px] font-bold text-black/60 opacity-0 backdrop-blur-sm transition-all duration-200 group-hover:opacity-100 dark:border-white/10 dark:bg-black/75 dark:text-white/60 pointer-events-none">
+          <Maximize2 className="h-3 w-3 text-sky-500" />
+          <span>Double-click to expand ⛶</span>
+        </div>
+      )}
+
       {isEmpty && (
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/5 backdrop-blur-[1px] dark:bg-black/10">
           <span className="text-sm font-medium text-black/30 dark:text-white/30">
@@ -307,7 +322,7 @@ export default function TankHistoryChart({
             domain={xDomain || ["auto", "auto"]}
             allowDataOverflow={true}
             ticks={xTicks}
-            tick={{ fill: "currentColor", fontSize: 10, opacity: 0.5 }}
+            tick={{ fill: "var(--muted)", fontSize: 10 }}
             tickFormatter={(t) => {
               const d = new Date(Number(t));
               const rangeMs = xDomain ? xDomain[1] - xDomain[0] : 0;
@@ -334,7 +349,7 @@ export default function TankHistoryChart({
           />
 
           <YAxis
-            tick={{ fill: "currentColor", fontSize: 10, opacity: 0.5 }}
+            tick={{ fill: "var(--muted)", fontSize: 10 }}
             width={50}
             domain={yDomain}
             tickCount={6}
@@ -382,9 +397,9 @@ export default function TankHistoryChart({
               type="linear"
               data={segment}
               dataKey="value"
-              stroke={themeColor}
-              strokeWidth={3}
-              strokeDasharray="5 5"
+              stroke="#ef4444"
+              strokeWidth={2}
+              strokeDasharray="4 4"
               strokeOpacity={0.85}
               dot={false}
               activeDot={false}

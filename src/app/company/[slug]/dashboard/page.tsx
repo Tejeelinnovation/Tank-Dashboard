@@ -34,6 +34,8 @@ type TankSetupItem = {
   temperatureM?: number;
   temperatureC_factor?: number;
   isDisabled?: boolean;
+  displayInKg?: boolean;
+  density?: number;
   metrics: [
     { channel: string; type: "volume"; unit: VolumeUnit },
     { channel: string; type: "temperature"; unit: TemperatureUnit }
@@ -163,6 +165,8 @@ export default function CompanyDashboardPage() {
           temperatureM: row.temperatureM ?? row.temperature_m ?? 1.0,
           temperatureC_factor: row.temperatureC_factor ?? row.temperature_c ?? 0.0,
           isDisabled: !!(row.isDisabled ?? row.is_disabled),
+          displayInKg: !!(row.displayInKg ?? row.display_in_kg),
+          density: row.density != null ? Number(row.density) : 1.0,
           metrics: [
             {
               channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(),
@@ -205,6 +209,8 @@ export default function CompanyDashboardPage() {
               temperatureM: row.temperatureM ?? row.temperature_m ?? 1.0,
               temperatureC_factor: row.temperatureC_factor ?? row.temperature_c ?? 0.0,
               isDisabled: !!(row.isDisabled ?? row.is_disabled),
+              displayInKg: !!(row.displayInKg ?? row.display_in_kg),
+              density: row.density != null ? Number(row.density) : 1.0,
               metrics: [
                 {
                   channel: String(row.volumeChannel ?? `CH${i * 2 + 1}`).trim(),
@@ -336,6 +342,8 @@ export default function CompanyDashboardPage() {
           disableVolume: cfg.disableVolume,
           disableTemperature: cfg.disableTemperature,
           isDisabled: cfg.isDisabled,
+          displayInKg: cfg.displayInKg,
+          density: cfg.density,
           volumeValue: Math.round(volumeValue * 100) / 100,
           temperatureValue:
             temperatureRaw !== undefined

@@ -24,6 +24,8 @@ export type TankSetupItem = {
   tempColor?: string;
   disableVolume?: boolean;
   disableTemperature?: boolean;
+  displayInKg?: boolean;
+  density?: number;
   metrics: [
     { channel: string; type: "volume"; unit: VolumeUnit },
     { channel: string; type: "temperature"; unit: TemperatureUnit }
@@ -53,6 +55,8 @@ export function makeDefaultTank(i: number): TankSetupItem {
     tempColor: undefined,
     disableVolume: false,
     disableTemperature: false,
+    displayInKg: false,
+    density: 1.0,
     metrics: [
       {
         channel: `CH${i * 2 + 1}`,
@@ -107,6 +111,8 @@ export function normalizeTank(
     tempColor: typeof t?.tempColor === "string" && t.tempColor ? t.tempColor : undefined,
     disableVolume: !!t?.disableVolume,
     disableTemperature: !!t?.disableTemperature,
+    displayInKg: !!t?.displayInKg,
+    density: t?.density != null ? Number(t.density) : 1.0,
     metrics: [
       normalizeVolumeMetric(metrics[0], `CH${i * 2 + 1}`),
       normalizeTemperatureMetric(metrics[1], `CH${i * 2 + 2}`),
