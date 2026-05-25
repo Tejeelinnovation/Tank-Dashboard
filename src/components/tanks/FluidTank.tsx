@@ -146,16 +146,32 @@ export default function FluidTank({
   const displayNode = React.useMemo(() => {
     const formattedVolume = formatDisplayValue(shownValue, shownUnit);
     if (!displayInKg || accent !== "volume") {
-      return <span>{formattedVolume}</span>;
+      const len = formattedVolume.length;
+      let fontSizeClass = "text-sm";
+      if (len > 12) fontSizeClass = "text-[10px]";
+      else if (len > 9) fontSizeClass = "text-xs";
+
+      return <span className={`${fontSizeClass} whitespace-nowrap`}>{formattedVolume}</span>;
     }
 
     const liters = convertToLiters(shownValue, shownUnit as VolumeUnit, capacityLiters);
     const massKg = liters * density;
     const formattedMass = `${massKg.toFixed(1)} kg`;
+
+    const volLen = formattedVolume.length;
+    let volFontSize = "text-sm";
+    if (volLen > 12) volFontSize = "text-[10px]";
+    else if (volLen > 9) volFontSize = "text-xs";
+
+    const massLen = formattedMass.length;
+    let massFontSize = "text-[11px]";
+    if (massLen > 12) massFontSize = "text-[9px]";
+    else if (massLen > 9) massFontSize = "text-[10px]";
+
     return (
       <div className="flex flex-col items-center justify-center leading-tight">
-        <span>{formattedVolume}</span>
-        <span className="text-[11px] opacity-80 mt-0.5">{formattedMass}</span>
+        <span className={`${volFontSize} font-bold whitespace-nowrap`}>{formattedVolume}</span>
+        <span className={`${massFontSize} font-bold opacity-80 mt-0.5 whitespace-nowrap`}>{formattedMass}</span>
       </div>
     );
   }, [shownValue, shownUnit, displayInKg, density, accent, capacityLiters]);
@@ -473,7 +489,7 @@ export default function FluidTank({
         <div
           className={[
             displayInKg && accent === "volume"
-              ? "max-w-[200px] rounded-2xl border px-4 py-2 text-sm font-bold text-white shadow-2xl backdrop-blur-xl flex flex-col items-center justify-center"
+              ? "max-w-[220px] rounded-2xl border px-4 py-2 text-white shadow-2xl backdrop-blur-xl flex flex-col items-center justify-center"
               : "max-w-[140px] truncate rounded-full border px-4 py-1.5 text-sm font-bold text-white shadow-2xl backdrop-blur-xl",
             badgeClass,
           ].join(" ")}
