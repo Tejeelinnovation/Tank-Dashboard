@@ -28,6 +28,33 @@ export async function GET(
       );
     }
 
+    let customUrl: string | undefined = undefined;
+    let customToken: string | undefined = undefined;
+    let finalOrg: string | undefined = undefined;
+    let finalBucket: string = bucket;
+
+    if (pool) {
+      try {
+        const companyRes = await pool.query(
+          `SELECT c.influx_org, c.influx_bucket, c.influx_url, c.influx_token
+           FROM company_tank_settings cts
+           JOIN companies c ON c.id = cts.company_id
+           WHERE cts.volume_channel = $1 OR cts.temperature_channel = $1
+           LIMIT 1`,
+          [channel]
+        );
+        if (companyRes.rows[0]) {
+          const comp = companyRes.rows[0];
+          if (comp.influx_url) customUrl = comp.influx_url;
+          if (comp.influx_token) customToken = comp.influx_token;
+          if (comp.influx_org) finalOrg = comp.influx_org;
+          if (comp.influx_bucket) finalBucket = comp.influx_bucket;
+        }
+      } catch (dbErr) {
+        console.error("DB check failed for channel in history API:", dbErr);
+      }
+    }
+
     // Security check
     if (pool) {
       try {
@@ -85,7 +112,7 @@ export async function GET(
     }
 
     const fluxRange = `
-from(bucket: "${bucket}")
+from(bucket: "${finalBucket}")
   |> range(start: time(v: "${start}"), stop: time(v: "${end}"))
   |> filter(fn: (r) => r._measurement == "tank_data")
   |> filter(fn: (r) => r._field == "value")
@@ -96,7 +123,7 @@ from(bucket: "${bucket}")
 `;
  
     const fluxPre = `
-from(bucket: "${bucket}")
+from(bucket: "${finalBucket}")
   |> range(start: time(v: "2020-01-01T00:00:00Z"), stop: time(v: "${start}"))
   |> filter(fn: (r) => r._measurement == "tank_data")
   |> filter(fn: (r) => r._field == "value")
@@ -106,7 +133,7 @@ from(bucket: "${bucket}")
 `;
 
     const fluxPost = `
-from(bucket: "${bucket}")
+from(bucket: "${finalBucket}")
   |> range(start: time(v: "${end}"), stop: now())
   |> filter(fn: (r) => r._measurement == "tank_data")
   |> filter(fn: (r) => r._field == "value")
@@ -122,15 +149,15 @@ from(bucket: "${bucket}")
     console.log("=====================================");
 
     const [rangeRows, preRows, postRows] = await Promise.all([
-      queryInflux<any>(fluxRange).catch((err) => {
+      queryInflux<any>(fluxRange, finalOrg, customUrl, customToken).catch((err) => {
         console.error("fluxRange error:", err);
         return [];
       }),
-      queryInflux<any>(fluxPre).catch((err) => {
+      queryInflux<any>(fluxPre, finalOrg, customUrl, customToken).catch((err) => {
         console.error("fluxPre error:", err);
         return [];
       }),
-      queryInflux<any>(fluxPost).catch((err) => {
+      queryInflux<any>(fluxPost, finalOrg, customUrl, customToken).catch((err) => {
         console.error("fluxPost error:", err);
         return [];
       }),

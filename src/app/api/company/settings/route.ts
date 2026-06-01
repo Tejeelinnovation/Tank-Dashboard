@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
 
     const companyRes = await pool.query(
       `
-      select id, name, slug, logo_url, tanks_count, tank_capacities, data_mode, influx_org, influx_bucket, pwd_reset_requested, pwd_reset_approved
+      select id, name, slug, logo_url, tanks_count, tank_capacities, data_mode, influx_org, influx_bucket, influx_url, influx_token, pwd_reset_requested, pwd_reset_approved
       from companies
       where id = $1
       limit 1
@@ -123,6 +123,8 @@ export async function GET(req: NextRequest) {
           dataMode: rawCompany.data_mode,
           influxOrg: rawCompany.influx_org,
           influxBucket: rawCompany.influx_bucket,
+          influxUrl: rawCompany.influx_url,
+          influxToken: rawCompany.influx_token,
           pwdResetRequested: !!rawCompany.pwd_reset_requested,
           pwdResetApproved: !!rawCompany.pwd_reset_approved,
         }

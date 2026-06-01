@@ -357,7 +357,7 @@ export default function CompanySetupPage() {
     if (!bucket) return;
     try {
       const res = await fetch(
-        `/api/influx/channels?org=${org || ""}&bucket=${bucket}`,
+        `/api/influx/channels?slug=${encodeURIComponent(slug)}&org=${org || ""}&bucket=${bucket}`,
       );
       const j = await res.json();
       if (res.ok && Array.isArray(j.channels)) {

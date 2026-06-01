@@ -26,25 +26,38 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
     }
 
+    let customUrl: string | undefined = undefined;
+    let customToken: string | undefined = undefined;
+    let finalOrg: string | undefined = undefined;
+    let finalBucket: string = bucket;
+
     // 1. Fetch settings if slug/tankKey provided
     let settings: any = null;
-    if (slug && tankKey && pool) {
+    if (slug && pool) {
       const companyRes = await pool.query(
-        `SELECT id FROM companies WHERE LOWER(slug) = LOWER($1) LIMIT 1`,
+        `SELECT id, influx_org, influx_bucket, influx_url, influx_token FROM companies WHERE LOWER(slug) = LOWER($1) LIMIT 1`,
         [slug]
       );
       if (companyRes.rows[0]) {
-        const tankRes = await pool.query(
-          `SELECT * FROM company_tank_settings 
-           WHERE company_id = $1 AND TRIM(LOWER(tank_key)) = TRIM(LOWER($2)) LIMIT 1`,
-          [companyRes.rows[0].id, tankKey]
-        );
-        settings = tankRes.rows[0];
+        const comp = companyRes.rows[0];
+        if (comp.influx_url) customUrl = comp.influx_url;
+        if (comp.influx_token) customToken = comp.influx_token;
+        if (comp.influx_org) finalOrg = comp.influx_org;
+        if (comp.influx_bucket) finalBucket = comp.influx_bucket;
+
+        if (tankKey) {
+          const tankRes = await pool.query(
+            `SELECT * FROM company_tank_settings 
+             WHERE company_id = $1 AND TRIM(LOWER(tank_key)) = TRIM(LOWER($2)) LIMIT 1`,
+            [comp.id, tankKey]
+          );
+          settings = tankRes.rows[0];
+        }
       }
     }
 
     const flux = `
-      from(bucket: "${bucket}")
+      from(bucket: "${finalBucket}")
         |> range(start: time(v: "${start}"), stop: time(v: "${end}"))
         |> filter(fn: (r) => r._measurement == "tank_data")
         |> filter(fn: (r) => r._field == "value")
@@ -54,7 +67,7 @@ export async function GET(req: NextRequest) {
         |> sort(columns: ["_time"])
     `;
 
-    const data = await queryInflux<InfluxHistoryRow>(flux);
+    const data = await queryInflux<InfluxHistoryRow>(flux, finalOrg, customUrl, customToken);
 
     if (data.length === 0) {
       return NextResponse.json({ error: "No data found" }, { status: 404 });
