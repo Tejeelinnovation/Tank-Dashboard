@@ -13,11 +13,16 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const type = searchParams.get("type"); // "orgs" or "buckets"
   const orgId = searchParams.get("orgId"); // for buckets
+  const influxUrl = searchParams.get("influxUrl") || INFLUX_URL;
+  const influxToken = searchParams.get("influxToken") || INFLUX_TOKEN;
 
   try {
     if (type === "orgs") {
-      const res = await fetch(`${INFLUX_URL}/api/v2/orgs`, {
-        headers: { Authorization: `Token ${INFLUX_TOKEN}` },
+      if (!influxUrl || !influxToken) {
+        return NextResponse.json({ error: "Influx URL and Token are required" }, { status: 400 });
+      }
+      const res = await fetch(`${influxUrl}/api/v2/orgs`, {
+        headers: { Authorization: `Token ${influxToken}` },
       });
       const data = await res.json();
       return NextResponse.json({ ok: true, orgs: data.orgs || [] });
@@ -25,8 +30,11 @@ export async function GET(req: NextRequest) {
 
     if (type === "buckets") {
       if (!orgId) return NextResponse.json({ error: "orgId required" }, { status: 400 });
-      const res = await fetch(`${INFLUX_URL}/api/v2/buckets?orgID=${orgId}`, {
-        headers: { Authorization: `Token ${INFLUX_TOKEN}` },
+      if (!influxUrl || !influxToken) {
+        return NextResponse.json({ error: "Influx URL and Token are required" }, { status: 400 });
+      }
+      const res = await fetch(`${influxUrl}/api/v2/buckets?orgID=${orgId}`, {
+        headers: { Authorization: `Token ${influxToken}` },
       });
       const data = await res.json();
       return NextResponse.json({ ok: true, buckets: data.buckets || [] });

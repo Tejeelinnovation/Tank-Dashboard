@@ -16,6 +16,8 @@ type Company = {
   tanksCount: number;
   influxOrg?: string;
   influxBucket?: string;
+  influxUrl?: string;
+  influxToken?: string;
   pwd_reset_requested?: boolean;
   pwd_reset_approved?: boolean;
 };
@@ -35,6 +37,8 @@ export default function AdminDashboardPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [selectedOrg, setSelectedOrg] = useState("");
   const [selectedBucket, setSelectedBucket] = useState("");
+  const [selectedInfluxUrl, setSelectedInfluxUrl] = useState("");
+  const [selectedInfluxToken, setSelectedInfluxToken] = useState("");
   
   // Discovery State
   const [availableOrgs, setAvailableOrgs] = useState<InfluxOrg[]>([]);
@@ -48,6 +52,8 @@ export default function AdminDashboardPage() {
   const [editLogoUrl, setEditLogoUrl] = useState("");
   const [editOrg, setEditOrg] = useState("");
   const [editBucket, setEditBucket] = useState("");
+  const [editInfluxUrl, setEditInfluxUrl] = useState("");
+  const [editInfluxToken, setEditInfluxToken] = useState("");
   const [editTanksCount, setEditTanksCount] = useState(1);
 
   const [err, setErr] = useState("");
@@ -80,31 +86,57 @@ export default function AdminDashboardPage() {
     }
   }, []);
 
-  const fetchOrgs = useCallback(async () => {
+  const fetchOrgs = useCallback(async (customUrl = "", customToken = "") => {
     try {
-      const res = await fetch("/api/admin/influx/discovery?type=orgs");
+      const queryParams = new URLSearchParams({ type: "orgs" });
+      if (customUrl) queryParams.set("influxUrl", customUrl);
+      if (customToken) queryParams.set("influxToken", customToken);
+
+      const res = await fetch(`/api/admin/influx/discovery?${queryParams.toString()}`);
       const j = await res.json();
       if (res.ok) setAvailableOrgs(j.orgs || []);
-    } catch (e) { console.error("Org fetch failed", e); }
+      else setAvailableOrgs([]);
+    } catch (e) {
+      console.error("Org fetch failed", e);
+      setAvailableOrgs([]);
+    }
   }, []);
 
-  const fetchBuckets = async (orgId: string, isEdit = false) => {
+  const fetchBuckets = async (orgId: string, isEdit = false, customUrl = "", customToken = "") => {
     if (!orgId) return;
     try {
-      const res = await fetch(`/api/admin/influx/discovery?type=buckets&orgId=${orgId}`);
+      const queryParams = new URLSearchParams({ type: "buckets", orgId });
+      if (customUrl) queryParams.set("influxUrl", customUrl);
+      if (customToken) queryParams.set("influxToken", customToken);
+
+      const res = await fetch(`/api/admin/influx/discovery?${queryParams.toString()}`);
       const j = await res.json();
       if (res.ok) {
         if (isEdit) setAvailableEditBuckets(j.buckets || []);
         else setAvailableBuckets(j.buckets || []);
+      } else {
+        if (isEdit) setAvailableEditBuckets([]);
+        else setAvailableBuckets([]);
       }
-    } catch (e) { console.error("Bucket fetch failed", e); }
+    } catch (e) {
+      console.error("Bucket fetch failed", e);
+      if (isEdit) setAvailableEditBuckets([]);
+      else setAvailableBuckets([]);
+    }
   };
 
   useEffect(() => {
     console.log("Admin Dashboard Loaded - V2 (Dynamic Influx)");
     load();
-    fetchOrgs();
-  }, [load, fetchOrgs]);
+  }, [load]);
+
+  useEffect(() => {
+    if (editingCompany) {
+      fetchOrgs(editInfluxUrl, editInfluxToken);
+    } else {
+      fetchOrgs(selectedInfluxUrl, selectedInfluxToken);
+    }
+  }, [editingCompany, selectedInfluxUrl, selectedInfluxToken, editInfluxUrl, editInfluxToken, fetchOrgs]);
 
   useEffect(() => {
     if (err) {
@@ -135,6 +167,8 @@ export default function AdminDashboardPage() {
           password,
           influxOrg: selectedOrg,
           influxBucket: selectedBucket,
+          influxUrl: selectedInfluxUrl.trim(),
+          influxToken: selectedInfluxToken.trim(),
         }),
       });
 
@@ -144,7 +178,7 @@ export default function AdminDashboardPage() {
         return;
       }
 
-      setName(""); setCompanyLoginId(""); setLogoUrl(""); setPassword(""); setConfirmPassword(""); setSelectedOrg(""); setSelectedBucket("");
+      setName(""); setCompanyLoginId(""); setLogoUrl(""); setPassword(""); setConfirmPassword(""); setSelectedOrg(""); setSelectedBucket(""); setSelectedInfluxUrl(""); setSelectedInfluxToken("");
       setShowValidation(false);
       await load();
     } catch {
@@ -171,8 +205,10 @@ export default function AdminDashboardPage() {
     setEditLogoUrl(c.logoUrl || "");
     setEditOrg(c.influxOrg || "");
     setEditBucket(c.influxBucket || "");
+    setEditInfluxUrl(c.influxUrl || "");
+    setEditInfluxToken(c.influxToken || "");
     setEditTanksCount(c.tanksCount);
-    if (c.influxOrg) fetchBuckets(c.influxOrg, true);
+    if (c.influxOrg) fetchBuckets(c.influxOrg, true, c.influxUrl, c.influxToken);
   };
 
   const saveEdit = async () => {
@@ -188,6 +224,8 @@ export default function AdminDashboardPage() {
           logoUrl: editLogoUrl.trim(),
           influxOrg: editOrg,
           influxBucket: editBucket,
+          influxUrl: editInfluxUrl.trim(),
+          influxToken: editInfluxToken.trim(),
           tanksCount: editTanksCount,
         }),
       });
@@ -257,7 +295,9 @@ export default function AdminDashboardPage() {
                 
                 <div className="space-y-2 pt-2">
                   <div className="text-[10px] font-bold uppercase opacity-40 px-1">Influx Data Source</div>
-                  <select value={selectedOrg} onChange={(e) => { setSelectedOrg(e.target.value); setSelectedBucket(""); fetchBuckets(e.target.value); }} className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/10 dark:bg-black/20 px-3 py-2 text-sm outline-none">
+                  <input value={selectedInfluxUrl} onChange={(e) => { setSelectedInfluxUrl(e.target.value); setSelectedOrg(""); setSelectedBucket(""); }} placeholder="Influx IP/URL (Optional)" className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/10 dark:bg-black/20 px-3 py-2 text-sm outline-none" />
+                  <input type="password" value={selectedInfluxToken} onChange={(e) => { setSelectedInfluxToken(e.target.value); setSelectedOrg(""); setSelectedBucket(""); }} placeholder="Influx Token (Optional)" className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/10 dark:bg-black/20 px-3 py-2 text-sm outline-none" />
+                  <select value={selectedOrg} onChange={(e) => { setSelectedOrg(e.target.value); setSelectedBucket(""); fetchBuckets(e.target.value, false, selectedInfluxUrl, selectedInfluxToken); }} className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/10 dark:bg-black/20 px-3 py-2 text-sm outline-none">
                     <option value="">Select Influx Org</option>
                     {availableOrgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                   </select>
@@ -332,7 +372,11 @@ export default function AdminDashboardPage() {
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <select value={editOrg} onChange={(e) => { setEditOrg(e.target.value); setEditBucket(""); fetchBuckets(e.target.value, true); }} className="w-full rounded-xl bg-white dark:bg-black/20 px-3 py-2 text-sm outline-none border border-black/10">
+                          <input value={editInfluxUrl} onChange={(e) => { setEditInfluxUrl(e.target.value); setEditOrg(""); setEditBucket(""); }} placeholder="Influx IP/URL (Optional)" className="w-full rounded-xl bg-white dark:bg-black/20 px-3 py-2 text-sm outline-none border border-black/10" />
+                          <input type="password" value={editInfluxToken} onChange={(e) => { setEditInfluxToken(e.target.value); setEditOrg(""); setEditBucket(""); }} placeholder="Influx Token (Optional)" className="w-full rounded-xl bg-white dark:bg-black/20 px-3 py-2 text-sm outline-none border border-black/10" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <select value={editOrg} onChange={(e) => { setEditOrg(e.target.value); setEditBucket(""); fetchBuckets(e.target.value, true, editInfluxUrl, editInfluxToken); }} className="w-full rounded-xl bg-white dark:bg-black/20 px-3 py-2 text-sm outline-none border border-black/10">
                             <option value="">Influx Org</option>
                             {availableOrgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                           </select>
@@ -358,9 +402,11 @@ export default function AdminDashboardPage() {
                             <div className="font-bold">{c.name}</div>
                             <div className="text-[10px] text-black/50 dark:text-white/50 uppercase tracking-widest font-semibold flex flex-col gap-0.5">
                               <span>ID: <span className="text-black dark:text-white">{c.companyLoginId}</span> • Tanks: <span className="text-black dark:text-white">{c.tanksCount}</span></span>
-                              <div className="flex gap-2">
-                                <span>Org: <span className="text-black dark:text-white">{availableOrgs.find(o => o.id === c.influxOrg)?.name || "N/A"}</span></span>
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                                <span>Org: <span className="text-black dark:text-white">{c.influxOrg || "N/A"}</span></span>
                                 <span>Bucket: <span className="text-black dark:text-white">{c.influxBucket || "N/A"}</span></span>
+                                {c.influxUrl && <span>IP/URL: <span className="text-black dark:text-white">{c.influxUrl}</span></span>}
+                                {c.influxToken && <span>Token: <span className="text-black dark:text-white">••••••••</span></span>}
                               </div>
                             </div>
                           </div>

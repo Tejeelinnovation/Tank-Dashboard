@@ -19,6 +19,8 @@ export type Company = {
   // Influx Configuration
   influxOrg?: string;
   influxBucket?: string;
+  influxUrl?: string;
+  influxToken?: string;
 
   pwd_reset_requested?: boolean;
   pwd_reset_approved?: boolean;
@@ -50,6 +52,8 @@ function mapCompanyRow(row: any): Company {
     dataMode: row.data_mode,
     influxOrg: row.influx_org ?? "",
     influxBucket: row.influx_bucket ?? "",
+    influxUrl: row.influx_url ?? "",
+    influxToken: row.influx_token ?? "",
     pwd_reset_requested: !!row.pwd_reset_requested,
     pwd_reset_approved: !!row.pwd_reset_approved,
     createdAt: row.created_at,
@@ -69,7 +73,7 @@ export async function readCompanies(): Promise<{ companies: Company[] }> {
 
 export async function readCompaniesSummary(): Promise<{ companies: Partial<Company>[] }> {
   const res = await pool.query(
-    `select id, name, slug, logo_url, company_login_id, tanks_count, data_mode, influx_org, influx_bucket, pwd_reset_requested, pwd_reset_approved, created_at 
+    `select id, name, slug, logo_url, company_login_id, tanks_count, data_mode, influx_org, influx_bucket, influx_url, influx_token, pwd_reset_requested, pwd_reset_approved, created_at 
      from companies 
      order by created_at desc`
   );
@@ -85,6 +89,8 @@ export async function readCompaniesSummary(): Promise<{ companies: Partial<Compa
       dataMode: row.data_mode,
       influxOrg: row.influx_org ?? "",
       influxBucket: row.influx_bucket ?? "",
+      influxUrl: row.influx_url ?? "",
+      influxToken: row.influx_token ?? "",
       pwd_reset_requested: !!row.pwd_reset_requested,
       pwd_reset_approved: !!row.pwd_reset_approved,
       createdAt: row.created_at
@@ -124,6 +130,8 @@ export async function createCompany(input: {
   dataMode?: "generated" | "csv" | "disabled";
   influxOrg?: string;
   influxBucket?: string;
+  influxUrl?: string;
+  influxToken?: string;
 }): Promise<Company> {
   const slug = input.slug?.trim() || slugify(input.name);
 
@@ -131,9 +139,9 @@ export async function createCompany(input: {
     `
     insert into companies (
       name, slug, logo_url, company_login_id, password_hash,
-      tanks_count, tank_capacities, csv_path, data_mode, influx_org, influx_bucket, pwd_reset_requested, pwd_reset_approved
+      tanks_count, tank_capacities, csv_path, data_mode, influx_org, influx_bucket, influx_url, influx_token, pwd_reset_requested, pwd_reset_approved
     )
-    values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13)
+    values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15)
     returning *
     `,
     [
@@ -148,6 +156,8 @@ export async function createCompany(input: {
       input.dataMode ?? "generated",
       input.influxOrg?.trim() || null,
       input.influxBucket?.trim() || null,
+      input.influxUrl?.trim() || null,
+      input.influxToken?.trim() || null,
       false,
       false
     ]
@@ -170,6 +180,8 @@ export async function updateCompany(
     dataMode: "generated" | "csv" | "disabled";
     influxOrg: string;
     influxBucket: string;
+    influxUrl: string;
+    influxToken: string;
     pwd_reset_requested: boolean;
     pwd_reset_approved: boolean;
   }>
@@ -197,8 +209,10 @@ export async function updateCompany(
       data_mode = $10,
       influx_org = $11,
       influx_bucket = $12,
-      pwd_reset_requested = $13,
-      pwd_reset_approved = $14,
+      influx_url = $13,
+      influx_token = $14,
+      pwd_reset_requested = $15,
+      pwd_reset_approved = $16,
       updated_at = now()
     where id = $1
     returning *
@@ -216,6 +230,8 @@ export async function updateCompany(
       input.dataMode ?? current.data_mode,
       input.influxOrg?.trim() ?? current.influx_org,
       input.influxBucket?.trim() ?? current.influx_bucket,
+      input.influxUrl?.trim() ?? current.influx_url,
+      input.influxToken?.trim() ?? current.influx_token,
       input.pwd_reset_requested ?? current.pwd_reset_requested,
       input.pwd_reset_approved ?? current.pwd_reset_approved,
     ]

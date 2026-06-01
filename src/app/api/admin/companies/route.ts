@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
     const tanksCount = Math.max(1, Number(body?.tanksCount || 1));
     const influxOrg = String(body?.influxOrg || "").trim();
     const influxBucket = String(body?.influxBucket || "").trim();
+    const influxUrl = body?.influxUrl ? String(body.influxUrl).trim() : undefined;
+    const influxToken = body?.influxToken ? String(body.influxToken).trim() : undefined;
 
     if (!name) return NextResponse.json({ ok: false, error: "Company name is required" }, { status: 400 });
     if (!requestedLoginId) return NextResponse.json({ ok: false, error: "Company Login ID is required" }, { status: 400 });
@@ -71,6 +73,8 @@ export async function POST(req: NextRequest) {
       dataMode: "generated",
       influxOrg,
       influxBucket,
+      influxUrl,
+      influxToken,
     });
 
     return NextResponse.json({ ok: true, company: created });

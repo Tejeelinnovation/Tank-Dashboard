@@ -69,6 +69,16 @@ export async function PATCH(
     patch.influxBucket = String(body.influxBucket).trim();
   }
 
+  if (body.influxUrl !== undefined) {
+    const val = String(body.influxUrl).trim();
+    patch.influxUrl = val || null;
+  }
+
+  if (body.influxToken !== undefined) {
+    const val = String(body.influxToken).trim();
+    patch.influxToken = val || null;
+  }
+
   // password update
   if (body.password !== undefined) {
     const pw = String(body.password).trim();
